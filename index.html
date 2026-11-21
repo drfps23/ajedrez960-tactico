@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="neon">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ajedrez 960 — Método Fischer Táctico</title>
+  <link rel="stylesheet" href="css/layout.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">♛</div>
+      <div>
+        <h1>Ajedrez 960 <span class="badge-tag">FISCHER TÁCTICO</span></h1>
+        <p class="subtitle">Generador Scharnagl #0–#959 · Motor Modular</p>
+      </div>
+    </div>
+
+    <div class="top-controls">
+      <select id="mode-select" class="ctrl-select" title="Modo de juego">
+        <option value="ai-normal">vs. IA Normal</option>
+        <option value="ai-easy">vs. IA Fácil</option>
+        <option value="pvp">2 Jugadores Local</option>
+      </select>
+
+      <div id="theme-slot" class="slot-inline"></div>
+
+      <button id="btn-random-960" class="btn btn-primary">🎲 Nueva 960</button>
+
+      <div class="pos-loader">
+        <input id="pos-input" type="number" min="0" max="959" value="518" title="Número Scharnagl (0-959)" />
+        <button id="btn-load-pos" class="btn btn-secondary">Cargar #</button>
+        <button id="btn-classic" class="btn btn-ghost" title="Ajedrez clásico (#518)">#518</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="arena">
+    <!-- Columna Principal: Tablero -->
+    <section class="board-column">
+      <div class="player-bar" id="player-top">
+        <div class="player-info">
+          <span class="dot dot-black" id="top-dot"></span>
+          <span class="player-name" id="top-name">Negras (IA)</span>
+          <span class="material-adv" id="material-top"></span>
+        </div>
+        <div class="captured-strip" id="captured-top"></div>
+        <div id="clock-top-slot" class="clock-slot"></div>
+      </div>
+
+      <div class="board-stage" id="board-stage">
+        <div class="board-wrapper" id="board-wrapper">
+          <div class="board-grid" id="board-grid"></div>
+          <svg class="tactical-svg" id="tactical-svg" viewBox="0 0 800 800" preserveAspectRatio="none"></svg>
+          <canvas class="fx-canvas" id="fx-canvas"></canvas>
+        </div>
+      </div>
+
+      <div class="player-bar" id="player-bottom">
+        <div class="player-info">
+          <span class="dot dot-white" id="bottom-dot"></span>
+          <span class="player-name" id="bottom-name">Blancas (Tú)</span>
+          <span class="material-adv" id="material-bottom"></span>
+        </div>
+        <div class="captured-strip" id="captured-bottom"></div>
+        <div id="clock-bottom-slot" class="clock-slot"></div>
+      </div>
+
+      <div class="board-toolbar">
+        <button id="btn-flip" class="btn btn-secondary">⇅ Voltear</button>
+        <button id="btn-undo" class="btn btn-secondary">↩ Deshacer</button>
+        <button id="btn-attack-map" class="btn btn-secondary">⚡ Mapa de Ataque</button>
+        <button id="btn-threat-lines" class="btn btn-secondary active">🎯 Líneas de Fuego</button>
+        <button id="btn-sound" class="btn btn-secondary active">🔊 Sonido</button>
+      </div>
+    </section>
+
+    <!-- Panel Lateral -->
+    <aside class="side-panel">
+      <div class="card status-card">
+        <div class="status-row">
+          <span class="pos-badge" id="pos-badge">Posición #518</span>
+          <span class="turn-pill" id="turn-pill">Turno: Blancas</span>
+        </div>
+        <p class="status-text" id="status-text">
+          Selecciona una pieza. Para enroque 960, selecciona el Rey y toca tu Torre resaltada en dorado.
+        </p>
+        <div id="postgame-slot"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Arsenal de Ataque</h2>
+          <span class="mini-hint">Vista previa FX</span>
+        </div>
+        <div class="fx-preview-grid" id="fx-preview-grid">
+          <button class="fx-btn" data-fx="P">♟ Estocada</button>
+          <button class="fx-btn" data-fx="N">♞ Sísmico</button>
+          <button class="fx-btn" data-fx="B">♝ Rayo</button>
+          <button class="fx-btn" data-fx="R">♜ Ariete</button>
+          <button class="fx-btn" data-fx="Q">♛ Nova</button>
+          <button class="fx-btn" data-fx="K">♚ Juicio</button>
+        </div>
+      </div>
+
+      <div class="card history-card">
+        <div class="card-header">
+          <h2>Historial de Jugadas</h2>
+          <button id="btn-copy-pgn" class="btn-tiny">📋 Copiar</button>
+        </div>
+        <div class="moves-list" id="moves-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Modal Coronación -->
+  <div class="modal-backdrop hidden" id="promo-modal">
+    <div class="modal-box">
+      <h3>Coronación de Peón</h3>
+      <p>Elige la pieza a promover:</p>
+      <div class="promo-choices" id="promo-choices"></div>
+    </div>
+  </div>
+
+  <!-- Modal Fin de Partida -->
+  <div class="modal-backdrop hidden" id="gameover-modal">
+    <div class="modal-box">
+      <h3 id="gameover-title">Fin de la Partida</h3>
+      <p id="gameover-subtitle"></p>
+      <div class="modal-actions" id="gameover-actions">
+        <button id="btn-rematch" class="btn btn-primary">🎲 Nueva Partida 960</button>
+        <button id="btn-close-gameover" class="btn btn-secondary">Ver Tablero</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
