@@ -3,6 +3,7 @@ import { SoundFX } from './audio.js';
 import { CombatFX } from './fx.js';
 import { ChessAI } from './ai.js';
 import { ThemeManager, THEMES } from './themes.js';
+import { FischerClock } from './clock.js';
 
 const UNICODE_CAPTURED = {
   w: { P: '♙', N: '♘', B: '♗', R: '♖', Q: '♕', K: '♔' },
@@ -20,7 +21,7 @@ class ChessApp {
     this.selected = null;
     this.legalForSelected = [];
     this.showAttackMap = false;
-    this.showThreatLines = false; // Tablero limpio por defecto
+    this.showThreatLines = false;
     this.aiBusy = false;
     this.isAnimating = false;
     this.hiddenSquares = new Set();
@@ -31,11 +32,10 @@ class ChessApp {
     this._cacheDom();
     this.fx = new CombatFX(this.dom.fxCanvas, this.dom.boardWrapper);
 
-    // Sincronizar botón de miras: desactivado por defecto y enfocado solo a tu pieza seleccionada
     this.dom.btnThreatLines.classList.remove('active');
     this.dom.btnThreatLines.textContent = '🎯 Mira al Seleccionar';
 
-    // Montar gestor de temas (Madera, Marfil, Gótico, Ajedrez Mágico, Neón)
+    // Fase 2: Gestor de Temas (incluye Harry Potter)
     this.themes = new ThemeManager({
       slotEl: this.dom.themeSlot,
       onThemeChange: (theme) => {
@@ -43,6 +43,15 @@ class ChessApp {
         this.setPieceRenderer(theme.renderPiece);
       }
     });
+
+    // Fase 3: Reloj con Incremento Fischer (desactivado por defecto vs IA, activo en 2 Jugadores / Online)
+    this.clock = new FischerClock({
+      topSlotEl: this.dom.clockTopSlot,
+      bottomSlotEl: this.dom.clockBottomSlot,
+      controlsHostEl: this.dom.themeSlot,
+      onTimeout: (loser, winner) => this._handleTimeout(loser, winner)
+    });
+    this.clock.applyModeDefault(this.mode);
 
     this._bindEvents();
     this._syncInputs();
@@ -54,6 +63,8 @@ class ChessApp {
     this.dom = {
       modeSelect: $('mode-select'),
       themeSlot: $('theme-slot'),
+      clockTopSlot: $('clock-top-slot'),
+      clockBottomSlot: $('clock-bottom-slot'),
       btnRandom960: $('btn-random-960'),
       posInput: $('pos-input'),
       btnLoadPos: $('btn-load-pos'),
@@ -94,6 +105,7 @@ class ChessApp {
   _bindEvents() {
     this.dom.modeSelect.addEventListener('change', (e) => {
       this.mode = e.target.value;
+      this.clock.applyModeDefault(this.mode);
       this._updatePlayerLabels();
       if (this._isAiTurn() && !this.isAnimating) this._scheduleAiMove();
     });
@@ -111,6 +123,7 @@ class ChessApp {
 
     this.dom.btnFlip.addEventListener('click', () => {
       this.flipped = !this.flipped;
+      this.clock.syncOrientation(this.flipped);
       this.render();
     });
 
@@ -192,6 +205,7 @@ class ChessApp {
     this.selected = null;
     this.legalForSelected = [];
     this.engine.reset(positionId);
+    this.clock.reset();
     this._syncInputs();
     this.dom.gameoverModal.classList.add('hidden');
     this.render();
@@ -294,6 +308,9 @@ class ChessApp {
     this.isAnimating = true;
     this.hiddenSquares.clear();
 
+    // Pausa justa durante la animación para que los efectos no consuman tiempo
+    this.clock.pause();
+
     const finishMove = () => {
       this.hiddenSquares.clear();
       this.isAnimating = false;
@@ -304,9 +321,13 @@ class ChessApp {
       }
 
       if (this.engine.status !== 'playing') {
+        this.clock.stop();
         this._handleGameOver();
         return;
       }
+
+      // Suma incremento Fischer al que movió y arranca el reloj del siguiente turno
+      this.clock.onMoveCompleted(moverColor, this.engine.turn);
 
       if (this._isAiTurn()) {
         this._scheduleAiMove();
@@ -399,7 +420,26 @@ class ChessApp {
 
     this.selected = null;
     this.legalForSelected = [];
+    this.clock.syncTurnAfterUndo(this.engine.turn);
     this.render();
+  }
+
+  _handleTimeout(loser, winner) {
+    if (this.engine.status !== 'playing') return;
+    this.engine.status = 'timeout';
+    this.engine.winner = winner;
+    this.aiBusy = false;
+    this.selected = null;
+    this.legalForSelected = [];
+    this.render();
+
+    const winText = winner === 'w' ? 'Blancas' : 'Negras';
+    const loseText = loser === 'w' ? 'Blancas' : 'Negras';
+    this.sound.playGameOver(winner === 'w');
+
+    this.dom.gameoverTitle.textContent = `⏱ ¡Tiempo Agotado! Ganan ${winText}`;
+    this.dom.gameoverSubtitle.textContent = `A las ${loseText} se les acabó el reloj Fischer en la posición #${this.engine.positionId}.`;
+    this.dom.gameoverModal.classList.remove('hidden');
   }
 
   _handleGameOver() {
@@ -520,9 +560,6 @@ class ChessApp {
     }
   }
 
-  /**
-   * Dibuja líneas de mira SOLO cuando el usuario activa el botón y selecciona una de sus piezas.
-   */
   _renderTacticalLines() {
     const svg = this.dom.tacticalSvg;
     svg.innerHTML = '';
@@ -587,6 +624,8 @@ class ChessApp {
       }
     } else if (this.engine.status === 'checkmate') {
       this.dom.statusText.textContent = `Jaque mate. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
+    } else if (this.engine.status === 'timeout') {
+      this.dom.statusText.textContent = `Tiempo agotado. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
     } else {
       this.dom.statusText.textContent = 'Partida finalizada en tablas.';
     }
