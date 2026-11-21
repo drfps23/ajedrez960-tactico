@@ -1,15 +1,74 @@
 const STORAGE_KEY = 'ajedrez960_theme_v1';
 
 /**
- * Inyecta css/themes.css automáticamente para no depender de cambios manuales en index.html.
+ * Inyecta css/themes.css y la paleta de Cámara Subterránea para el tema Harry Potter.
  */
 function ensureThemesStylesheet() {
-  if (document.querySelector('link[data-themes-css]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = 'css/themes.css';
-  link.dataset.themesCss = 'true';
-  document.head.appendChild(link);
+  if (!document.querySelector('link[data-themes-css]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'css/themes.css';
+    link.dataset.themesCss = 'true';
+    document.head.appendChild(link);
+  }
+
+  if (!document.querySelector('style[data-hp-theme]')) {
+    const style = document.createElement('style');
+    style.dataset.hpTheme = 'true';
+    style.textContent = `
+      html[data-theme="magic"] {
+        --bg-main: #0d0c10;
+        --bg-panel: #17141a;
+        --bg-card: #201b22;
+        --border-color: rgba(217, 165, 68, 0.30);
+        --text-main: #f4eee1;
+        --text-muted: #b8aa96;
+
+        --sq-light: #cfc5b1;
+        --sq-dark: #2c2a30;
+        --sq-selected: rgba(217, 165, 68, 0.52);
+        --sq-last-from: rgba(185, 28, 28, 0.28);
+        --sq-last-to: rgba(217, 165, 68, 0.44);
+        --sq-castle: rgba(234, 179, 8, 0.58);
+
+        --accent-cyan: #eab308;
+        --accent-crimson: #dc2626;
+        --accent-gold: #facc15;
+        --accent-violet: #991b1b;
+
+        --board-border: #6e5326;
+        --board-shadow: 0 26px 60px rgba(0, 0, 0, 0.85), 0 0 32px rgba(217, 165, 68, 0.18);
+      }
+      html[data-theme="magic"] body {
+        background: radial-gradient(circle at top, #291d1a 0%, #0b0a0e 70%);
+      }
+      html[data-theme="magic"] .square.light {
+        background-image:
+          linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(120,104,80,0.16) 100%),
+          repeating-linear-gradient(45deg, rgba(80,68,52,0.04) 0px, rgba(80,68,52,0.04) 2px, transparent 2px, transparent 10px);
+      }
+      html[data-theme="magic"] .square.dark {
+        background-image:
+          linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.34) 100%),
+          radial-gradient(circle at 25% 25%, rgba(217, 165, 68, 0.08), transparent 65%);
+      }
+      html[data-theme="magic"] .square.light .coord-rank,
+      html[data-theme="magic"] .square.light .coord-file {
+        color: #3d3224;
+        opacity: 0.78;
+      }
+      html[data-theme="magic"] .square.dark .coord-rank,
+      html[data-theme="magic"] .square.dark .coord-file {
+        color: #dfd4be;
+        opacity: 0.72;
+      }
+      html[data-theme="magic"] .move-dot {
+        background: rgba(217, 165, 68, 0.85);
+        box-shadow: 0 0 12px rgba(234, 179, 8, 0.75);
+      }
+    `;
+    document.head.appendChild(style);
+  }
 }
 
 /* ---------- RENDERIZADORES SVG POR ESTILO DE PIEZA ---------- */
@@ -57,9 +116,6 @@ function renderClassicSculptedSvg(type, color, pal) {
   return `<svg viewBox="0 0 45 45" aria-hidden="true">${shapes[type] || ''}</svg>`;
 }
 
-/**
- * Siluetas afiladas estilo Catedral Gótica (arcos ojivales, agujas y yelmos).
- */
 function renderGothicSvg(type, color) {
   const isW = color === 'w';
   const fill = isW ? '#e5e2dc' : '#141219';
@@ -91,40 +147,97 @@ function renderGothicSvg(type, color) {
 }
 
 /**
- * Estatuas talladas en piedra con runas brillantes estilo Ajedrez Mágico / Arcano.
+ * Piezas del Ajedrez Mágico de Harry Potter (estatuas guerreras medievales estilo Lewis):
+ * Blancas en piedra caliza/marfil con oro viejo; Negras en basalto oscuro con acentos carmesí y bronce.
  */
-function renderMagicSvg(type, color) {
+function renderHarryPotterSvg(type, color) {
   const isW = color === 'w';
-  const stone = isW ? '#e9e2ce' : '#1f2623';
-  const deep = isW ? '#bfb496' : '#121815';
-  const stroke = isW ? '#3d331d' : '#10b981';
-  const rune = isW ? '#d97706' : '#34d399';
-  const glow = isW ? '#fde047' : '#6ee7b7';
+  const stone = isW ? '#f2ead7' : '#232229';
+  const shade = isW ? '#c8ba9c' : '#121116';
+  const stroke = isW ? '#2c2216' : '#d4a64a';
+  const metal = isW ? '#9a6b26' : '#e11d48';
+  const gold = isW ? '#d97706' : '#f59e0b';
+  const visor = isW ? '#4b3b28' : '#09090b';
 
   const shapes = {
-    P: `<path d="M13 38l3-5 1-11-3-3 3-9h11l3 9-3 3 1 11 3 5H13z" fill="${stone}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M18 14h9l-4.5 5z" fill="${deep}" stroke="${stroke}" stroke-width="1.4"/>
-        <path d="M22.5 22v10M19 26h7" stroke="${rune}" stroke-width="2.4" stroke-linecap="round"/>
-        <circle cx="22.5" cy="11.5" r="2" fill="${glow}"/>`,
-    R: `<path d="M10 9h6v5h3.5V9h6v5H29V9h6v9l-4 3v12l3 3v3H11v-3l3-3V21l-4-3V9z" fill="${stone}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
-        <polygon points="22.5,20 26.5,26 22.5,32 18.5,26" fill="${deep}" stroke="${rune}" stroke-width="2"/>
-        <circle cx="22.5" cy="26" r="2" fill="${glow}"/>`,
-    N: `<path d="M11 39l2-5 5-5c-3-2-5-5-4-9l-3-2 4-8 6-4 3 3c6 0 10 4 11 11 1 5-1 10-4 14l3 5H11z" fill="${stone}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M17 16l4 1-2 3z" fill="${glow}" stroke="${rune}" stroke-width="1"/>
-        <path d="M24 12c4 3 6 8 4 16" fill="none" stroke="${rune}" stroke-width="2.4" stroke-dasharray="3 2"/>
-        <line x1="14" y1="35" x2="31" y2="35" stroke="${rune}" stroke-width="2.2"/>`,
-    B: `<path d="M22.5 6l7 10-2 15 5 5v3H12.5v-3l5-5-2-15 7-10z" fill="${stone}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
-        <circle cx="22.5" cy="17" r="3.4" fill="${deep}" stroke="${rune}" stroke-width="2"/>
-        <circle cx="22.5" cy="17" r="1.4" fill="${glow}"/>
-        <path d="M22.5 22v10M18.5 28l4-3 4 3" fill="none" stroke="${rune}" stroke-width="2.1"/>`,
-    Q: `<path d="M8 14l6 13 4-15 4.5 11L27 12l4 15 6-13-4 20H12L8 14z" fill="${stone}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
-        <circle cx="22.5" cy="9" r="3.2" fill="${glow}" stroke="${rune}" stroke-width="1.6"/>
-        <polygon points="22.5,22 26,27 22.5,31 19,27" fill="${rune}"/>
-        <rect x="11" y="34" width="23" height="5" rx="1.5" fill="${deep}" stroke="${stroke}" stroke-width="2"/>`,
-    K: `<path d="M22.5 5l3 5-3 4-3-4 3-5z" fill="${glow}" stroke="${rune}" stroke-width="1.5"/>
-        <path d="M11 16l6 3 5.5-5 5.5 5 6-3-3 18H14l-3-18z" fill="${stone}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M22.5 19v13M18 24l4.5-3 4.5 3" fill="none" stroke="${rune}" stroke-width="2.3"/>
-        <rect x="11" y="34" width="23" height="5" rx="1.5" fill="${deep}" stroke="${stroke}" stroke-width="2"/>`
+    // Peón: Guerrero con yelmo medieval, espada en alto y escudo de cometa
+    P: `<ellipse cx="22.5" cy="40" rx="12.5" ry="2.4" fill="rgba(0,0,0,0.4)"/>
+        <!-- Hoja de espada detrás del yelmo -->
+        <path d="M31 8l2 3-3 12-2.5-1 3.5-14z" fill="${gold}" stroke="${stroke}" stroke-width="1.3"/>
+        <!-- Pedestal -->
+        <rect x="11" y="35.5" width="23" height="4" rx="1.4" fill="${shade}" stroke="${stroke}" stroke-width="1.8"/>
+        <!-- Yelmo medieval con visor -->
+        <path d="M16 14.5c0-4.2 3-6.8 6.5-6.8s6.5 2.6 6.5 6.8v4.5H16v-4.5z" fill="${stone}" stroke="${stroke}" stroke-width="1.8"/>
+        <path d="M17.5 14h10M22.5 11.5v5.5" stroke="${visor}" stroke-width="2" stroke-linecap="round"/>
+        <!-- Escudo medieval frontal (kite shield) -->
+        <path d="M13.5 19.5h18v7.5c0 4.8-4 8-9 9.5-5-1.5-9-4.7-9-9.5v-7.5z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <path d="M22.5 21v13M16.5 25.5h12" stroke="${metal}" stroke-width="2.4" stroke-linecap="round"/>`,
+
+    // Torre: Torreón de castillo de piedra con almenas pesadas y portón ojival
+    R: `<ellipse cx="22.5" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.4)"/>
+        <path d="M9.5 8h5.5v4.5h4.2V8h6.6v4.5H30V8h5.5v8.5l-3.5 3V33l3.2 3v3.5H9.8V36L13 33V19.5l-3.5-3V8z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <!-- Mampostería de piedra -->
+        <path d="M13 18.5h19M13.5 24h18M13.5 29.5h18" stroke="${shade}" stroke-width="1.4" opacity="0.8"/>
+        <!-- Portón gótico fortificado -->
+        <path d="M18 35.5V26c0-2.8 2-4.8 4.5-6 2.5 1.2 4.5 3.2 4.5 6v9.5z" fill="${visor}" stroke="${gold}" stroke-width="1.8"/>
+        <line x1="22.5" y1="20.5" x2="22.5" y2="35.5" stroke="${metal}" stroke-width="1.6"/>
+        <rect x="9.5" y="35.5" width="26" height="4" rx="1.2" fill="${shade}" stroke="${stroke}" stroke-width="1.8"/>`,
+
+    // Caballo: Corcel de guerra acorazado (barda frontal y crin tallada, icónico de la película)
+    N: `<ellipse cx="22.5" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.4)"/>
+        <path d="M11 38.5v-3.5l5-5.5c-2.8-1.4-5.2-4.4-4.8-8.2l-3.2-1.8 3.6-7.6 5.2-4.8 2.8-1.6 1.6 3.2c6.2-.5 11.8 3.8 13.2 11.2 1.1 5.6-.8 10.8-3.4 14.5l3 4.1H11z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <!-- Barda / armadura frontal del caballo -->
+        <path d="M13 13.5l5.5-3.2 3 5.5-5.2 4.2-4.2-2.2z" fill="${shade}" stroke="${gold}" stroke-width="1.5"/>
+        <!-- Ojo fiero y riendas de batalla -->
+        <circle cx="17.8" cy="14.5" r="1.6" fill="${metal}"/>
+        <path d="M11.8 21l8.5 3.5 5.5-2.5" fill="none" stroke="${gold}" stroke-width="2" stroke-linecap="round"/>
+        <!-- Placas de crin talladas -->
+        <path d="M23.5 11.2c4.5 2 7.2 7.2 6.5 13.8-.5 4.2-2.2 7.2-4.8 9.2" fill="none" stroke="${metal}" stroke-width="2.5" stroke-dasharray="4 2"/>
+        <rect x="10.5" y="35.5" width="24" height="4" rx="1.4" fill="${shade}" stroke="${stroke}" stroke-width="1.8"/>`,
+
+    // Alfil: Obispo medieval estilo Lewis con mitra alta y báculo tallado
+    B: `<ellipse cx="22.5" cy="40" rx="13.5" ry="2.4" fill="rgba(0,0,0,0.4)"/>
+        <!-- Báculo pastoral lateral -->
+        <path d="M33.5 36V12.5c0-2.6-2-4.2-4-4.2-1.8 0-3 1.3-3 2.8 0 1.3 1 2.2 2.2 2.2" fill="none" stroke="${gold}" stroke-width="2.3" stroke-linecap="round"/>
+        <!-- Túnica y cuerpo esculpido -->
+        <path d="M12 36l2.5-14c.8-3 3.8-4.5 8-4.5s7.2 1.5 8 4.5l2.5 14H12z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <!-- Mitra puntiaguda del obispo -->
+        <path d="M15.5 17.5l7-11.5 7 11.5H15.5z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <path d="M22.5 8.5v8.5M19 13.5h7" stroke="${metal}" stroke-width="2.1" stroke-linecap="round"/>
+        <!-- Rostro severo / cuello tallado y cruz pectoral -->
+        <path d="M17.5 18.5h10v3.5h-10z" fill="${shade}" stroke="${stroke}" stroke-width="1.3"/>
+        <path d="M22.5 23.5v9M19 27h7" stroke="${gold}" stroke-width="2.2" stroke-linecap="round"/>
+        <rect x="10.5" y="35.5" width="24" height="4" rx="1.4" fill="${shade}" stroke="${stroke}" stroke-width="1.8"/>`,
+
+    // Dama: Reina Guerrera de piedra (corona medieval alta, manto imponente y cetro)
+    Q: `<ellipse cx="22.5" cy="40" rx="14.5" ry="2.4" fill="rgba(0,0,0,0.4)"/>
+        <!-- Corona medieval de puntas -->
+        <path d="M11 16.5l2.2-9 5.3 4.8L22.5 5l4 7.3 5.3-4.8 2.2 9H11z" fill="${gold}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/>
+        <!-- Cabeza y velo real tallado -->
+        <path d="M14.5 16.5h16v6.5c0 2-3.5 3.5-8 3.5s-8-1.5-8-3.5v-6.5z" fill="${stone}" stroke="${stroke}" stroke-width="1.8"/>
+        <path d="M18.5 19.5h2.2M24.3 19.5h2.2" stroke="${visor}" stroke-width="1.8" stroke-linecap="round"/>
+        <!-- Manto real sobre trono -->
+        <path d="M10.5 36l3-11.5c2-1.8 5.2-2.5 9-2.5s7 .7 9 2.5l3 11.5H10.5z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <!-- Collar y cetro real central -->
+        <path d="M22.5 24v11.5" stroke="${metal}" stroke-width="2.6" stroke-linecap="round"/>
+        <polygon points="22.5,22 25.2,25.5 22.5,29 19.8,25.5" fill="${gold}" stroke="${stroke}" stroke-width="1.2"/>
+        <rect x="9.5" y="35.5" width="26" height="4" rx="1.4" fill="${shade}" stroke="${stroke}" stroke-width="1.8"/>`,
+
+    // Rey: Rey Guerrero de Lewis en trono empuñando su gran mandoble vertical
+    K: `<ellipse cx="22.5" cy="40" rx="14.5" ry="2.4" fill="rgba(0,0,0,0.4)"/>
+        <!-- Corona real con cruz soberana -->
+        <path d="M22.5 3.5v5.5M20 5.8h5" stroke="${gold}" stroke-width="2.3" stroke-linecap="round"/>
+        <path d="M12.5 15l1.5-6.5 4.2 3.2L22.5 8l4.3 3.7 4.2-3.2 1.5 6.5h-20z" fill="${gold}" stroke="${stroke}" stroke-width="1.7" stroke-linejoin="round"/>
+        <!-- Rostro con barba esculpida estilo Lewis -->
+        <path d="M15.5 15h14v5.5c0 2.5-3 4.2-7 4.2s-7-1.7-7-4.2V15z" fill="${stone}" stroke="${stroke}" stroke-width="1.8"/>
+        <path d="M18.5 18h2M24.5 18h2" stroke="${visor}" stroke-width="1.9" stroke-linecap="round"/>
+        <!-- Hombros acorazados y manto -->
+        <path d="M10 36l2.5-12c2.2-1.8 5.8-2.6 10-2.6s7.8.8 10 2.6l2.5 12H10z" fill="${stone}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
+        <!-- Gran mandoble (espada a dos manos) empuñado al centro -->
+        <path d="M22.5 20.5v15.5" stroke="${metal}" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M16.5 25.5h12" stroke="${gold}" stroke-width="2.6" stroke-linecap="round"/>
+        <circle cx="22.5" cy="21" r="2.2" fill="${gold}" stroke="${stroke}" stroke-width="1.2"/>
+        <rect x="9.5" y="35.5" width="26" height="4" rx="1.4" fill="${shade}" stroke="${stroke}" stroke-width="1.8"/>`
   };
   return `<svg viewBox="0 0 45 45" aria-hidden="true">${shapes[type] || ''}</svg>`;
 }
@@ -198,16 +311,16 @@ export const THEMES = {
   },
   magic: {
     id: 'magic',
-    label: '🪄 Ajedrez Mágico',
+    label: '🪄 Harry Potter',
     fxPalette: {
-      P: '#fde047',
+      P: '#fbbf24',
       N: '#f97316',
-      B: '#34d399',
-      R: '#f59e0b',
-      Q: '#a855f7',
-      K: '#facc15'
+      B: '#dc2626',
+      R: '#eab308',
+      Q: '#ef4444',
+      K: '#fde047'
     },
-    renderPiece: renderMagicSvg
+    renderPiece: renderHarryPotterSvg
   }
 };
 
