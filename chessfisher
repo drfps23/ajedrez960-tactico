@@ -1,1 +1,15 @@
-
+ajedrez960-tactico/
+├── index.html          # Solo la estructura HTML (limpia y corta)
+├── css/
+│   ├── layout.css      # Disposición general, botones y paneles
+│   └── themes.css      # Variables de color de cada tema visual
+├── js/
+│   ├── main.js         # Orquestador: conecta eventos con el motor y la vista
+│   ├── engine.js       # Reglas puras del Ajedrez 960 (Scharnagl, enroque, jaques)
+│   ├── ai.js           # Motor de IA (Minimax / Alfa-Beta)
+│   ├── fx.js           # Canvas de animaciones de ataque y partículas
+│   ├── audio.js        # Efectos de sonido procedurales (Web Audio API)
+│   ├── themes.js       # [Módulo nuevo] Sets de fichas y tableros intercambiables
+│   ├── clock.js        # [Módulo nuevo] Reloj con incremento Fischer
+│   ├── analyzer.js     # [Módulo nuevo] Revisión y explicación post-partida
+│   └── multiplayer.js  # [Futuro] Conexión online (Firebase / WebRTC)
