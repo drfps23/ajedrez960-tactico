@@ -1,0 +1,208 @@
+/* === TEMA 2: MADERA CLÁSICA === */
+[data-theme="wood"] {
+  --bg-main: #18110c;
+  --bg-panel: #241912;
+  --bg-card: #2c1f16;
+  --border-color: rgba(217, 179, 130, 0.22);
+  --text-main: #f7efe5;
+  --text-muted: #c7b299;
+
+  --sq-light: #e7cfa8;
+  --sq-dark: #8c5a32;
+  --sq-selected: rgba(245, 158, 11, 0.55);
+  --sq-last-from: rgba(234, 179, 8, 0.34);
+  --sq-last-to: rgba(234, 179, 8, 0.5);
+  --sq-castle: rgba(245, 158, 11, 0.55);
+
+  --accent-cyan: #f59e0b;
+  --accent-crimson: #dc2626;
+  --accent-gold: #fbbf24;
+  --accent-violet: #d97706;
+
+  --board-border: #59361c;
+  --board-shadow: 0 22px 50px rgba(0, 0, 0, 0.72), inset 0 0 0 2px #b07d4f;
+}
+
+[data-theme="wood"] body {
+  background: radial-gradient(circle at top, #312116 0%, #140d09 70%);
+}
+
+[data-theme="wood"] .square.light {
+  background-image: repeating-linear-gradient(
+    94deg,
+    rgba(139, 90, 43, 0.04) 0px,
+    rgba(139, 90, 43, 0.04) 3px,
+    transparent 3px,
+    transparent 11px
+  );
+}
+
+[data-theme="wood"] .square.dark {
+  background-image: repeating-linear-gradient(
+    86deg,
+    rgba(25, 12, 4, 0.14) 0px,
+    rgba(25, 12, 4, 0.14) 4px,
+    transparent 4px,
+    transparent 13px
+  );
+}
+
+[data-theme="wood"] .square.light .coord-rank,
+[data-theme="wood"] .square.light .coord-file {
+  color: #5c371a;
+  opacity: 0.78;
+}
+
+[data-theme="wood"] .square.dark .coord-rank,
+[data-theme="wood"] .square.dark .coord-file {
+  color: #f3dec0;
+  opacity: 0.75;
+}
+
+[data-theme="wood"] .move-dot {
+  background: rgba(66, 36, 14, 0.58);
+  box-shadow: 0 0 0 2px rgba(255, 241, 214, 0.35);
+}
+
+/* === TEMA 3: MARFIL Y ÉBANO === */
+[data-theme="ivory"] {
+  --bg-main: #0f1115;
+  --bg-panel: #171a21;
+  --bg-card: #1e222b;
+  --border-color: rgba(226, 194, 117, 0.22);
+  --text-main: #f5f2ea;
+  --text-muted: #a6a9b2;
+
+  --sq-light: #efeae0;
+  --sq-dark: #3b4049;
+  --sq-selected: rgba(212, 175, 55, 0.48);
+  --sq-last-from: rgba(212, 175, 55, 0.28);
+  --sq-last-to: rgba(212, 175, 55, 0.44);
+  --sq-castle: rgba(212, 175, 55, 0.55);
+
+  --accent-cyan: #e2c275;
+  --accent-crimson: #e11d48;
+  --accent-gold: #f0d38c;
+  --accent-violet: #cbd5e1;
+
+  --board-border: #8c733d;
+  --board-shadow: 0 24px 55px rgba(0, 0, 0, 0.78);
+}
+
+[data-theme="ivory"] body {
+  background: radial-gradient(circle at top, #232730 0%, #0b0d10 70%);
+}
+
+[data-theme="ivory"] .square.light {
+  background-image: linear-gradient(135deg, rgba(255,255,255,0.45) 0%, rgba(210,200,180,0.18) 100%);
+}
+
+[data-theme="ivory"] .square.dark {
+  background-image: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.25) 100%);
+}
+
+[data-theme="ivory"] .square.light .coord-rank,
+[data-theme="ivory"] .square.light .coord-file {
+  color: #2c3038;
+  opacity: 0.75;
+}
+
+[data-theme="ivory"] .square.dark .coord-rank,
+[data-theme="ivory"] .square.dark .coord-file {
+  color: #efeae0;
+  opacity: 0.72;
+}
+
+[data-theme="ivory"] .move-dot {
+  background: rgba(161, 126, 48, 0.72);
+  box-shadow: 0 0 8px rgba(226, 194, 117, 0.5);
+}
+
+/* === TEMA 4: CATEDRAL GÓTICA === */
+[data-theme="gothic"] {
+  --bg-main: #09080c;
+  --bg-panel: #131118;
+  --bg-card: #1b1822;
+  --border-color: rgba(220, 38, 38, 0.28);
+  --text-main: #f3eff5;
+  --text-muted: #9f96ad;
+
+  --sq-light: #4e4c59;
+  --sq-dark: #1d1b24;
+  --sq-selected: rgba(220, 38, 38, 0.48);
+  --sq-last-from: rgba(190, 24, 93, 0.28);
+  --sq-last-to: rgba(220, 38, 38, 0.42);
+  --sq-castle: rgba(217, 119, 6, 0.52);
+
+  --accent-cyan: #ef4444;
+  --accent-crimson: #f43f5e;
+  --accent-gold: #e5e7eb;
+  --accent-violet: #991b1b;
+
+  --board-border: #5c1620;
+  --board-shadow: 0 24px 58px rgba(0, 0, 0, 0.85), 0 0 28px rgba(153, 27, 27, 0.25);
+}
+
+[data-theme="gothic"] body {
+  background: radial-gradient(circle at top, #24131c 0%, #07060a 68%);
+}
+
+[data-theme="gothic"] .square.light {
+  background-image: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), transparent 70%);
+}
+
+[data-theme="gothic"] .square.dark {
+  background-image: radial-gradient(circle at 70% 70%, rgba(153, 27, 27, 0.12), transparent 75%);
+}
+
+[data-theme="gothic"] .move-dot {
+  background: rgba(239, 68, 68, 0.78);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+}
+
+/* === TEMA 5: AJEDREZ MÁGICO (ARCANO) === */
+[data-theme="magic"] {
+  --bg-main: #0a100e;
+  --bg-panel: #111c18;
+  --bg-card: #162520;
+  --border-color: rgba(234, 179, 8, 0.28);
+  --text-main: #f6f4e8;
+  --text-muted: #9eb8ae;
+
+  --sq-light: #4e5b52;
+  --sq-dark: #202a25;
+  --sq-selected: rgba(234, 179, 8, 0.48);
+  --sq-last-from: rgba(16, 185, 129, 0.26);
+  --sq-last-to: rgba(234, 179, 8, 0.4);
+  --sq-castle: rgba(234, 179, 8, 0.56);
+
+  --accent-cyan: #fbbf24;
+  --accent-crimson: #10b981;
+  --accent-gold: #fde047;
+  --accent-violet: #34d399;
+
+  --board-border: #9a7424;
+  --board-shadow: 0 24px 55px rgba(0, 0, 0, 0.8), 0 0 30px rgba(234, 179, 8, 0.18);
+}
+
+[data-theme="magic"] body {
+  background: radial-gradient(circle at top, #1b3026 0%, #080d0b 70%);
+}
+
+[data-theme="magic"] .square.light {
+  background-image: linear-gradient(135deg, rgba(250, 204, 21, 0.08) 0%, transparent 65%);
+}
+
+[data-theme="magic"] .square.dark {
+  background-image: linear-gradient(135deg, rgba(16, 185, 129, 0.09) 0%, rgba(0, 0, 0, 0.25) 100%);
+}
+
+[data-theme="magic"] .move-dot {
+  background: rgba(250, 204, 21, 0.82);
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.75);
+}
+
+/* Ajuste visual del selector de temas */
+.theme-select {
+  min-width: 158px;
+}
