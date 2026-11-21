@@ -2,64 +2,12 @@ import { Chess960Engine, FILES } from './engine.js';
 import { SoundFX } from './audio.js';
 import { CombatFX } from './fx.js';
 import { ChessAI } from './ai.js';
+import { ThemeManager, THEMES } from './themes.js';
 
 const UNICODE_CAPTURED = {
   w: { P: '♙', N: '♘', B: '♗', R: '♖', Q: '♕', K: '♔' },
   b: { P: '♟', N: '♞', B: '♝', R: '♜', Q: '♛', K: '♚' }
 };
-
-/**
- * Renderizador SVG escultórico con contraste nítido entre Blancas (Marfil/Plata) y Negras (Obsidiana/Cian).
- */
-export function defaultPieceSvg(type, color) {
-  const isW = color === 'w';
-  const fill = isW ? '#f8fafc' : '#111827';
-  const shade = isW ? '#cbd5e1' : '#1e293b';
-  const stroke = isW ? '#0f172a' : '#38bdf8';
-  const accent = isW ? '#0284c7' : '#f43f5e';
-  const highlight = isW ? '#ffffff' : '#64748b';
-
-  const shapes = {
-    P: `<ellipse cx="22.5" cy="39" rx="12" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-        <path d="M12 37.5c0-4.2 4.5-6.5 10.5-6.5S33 33.3 33 37.5v2H12v-2z" fill="${fill}" stroke="${stroke}" stroke-width="1.9"/>
-        <path d="M16.5 21h12l-2 10h-8l-2-10z" fill="${shade}" stroke="${stroke}" stroke-width="1.9"/>
-        <circle cx="22.5" cy="14" r="6" fill="${fill}" stroke="${stroke}" stroke-width="1.9"/>
-        <circle cx="20.6" cy="12" r="1.8" fill="${highlight}" opacity="0.7"/>
-        <rect x="15" y="19.5" width="15" height="2.6" rx="1.2" fill="${accent}" stroke="${stroke}" stroke-width="1.1"/>`,
-    R: `<ellipse cx="22.5" cy="39.5" rx="13.5" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-        <path d="M10.5 9.5h5v4.2h4.2V9.5h5.6v4.2h4.2V9.5h5v7.5l-3.8 3.2v11.8l3.3 3v4H11v-4l3.3-3V20.2l-3.8-3.2V9.5z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
-        <rect x="14.5" y="20" width="16" height="12" fill="${shade}" opacity="0.65"/>
-        <rect x="13" y="18.2" width="19" height="2.6" rx="1" fill="${accent}"/>
-        <rect x="13" y="32" width="19" height="2.6" rx="1" fill="${accent}"/>`,
-    N: `<ellipse cx="22.5" cy="39.5" rx="13.5" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-        <path d="M12 38.5v-3.8l4.5-4.8c-2.5-1.4-4.5-4.6-3.8-8.2l-3.2-1.8 4.2-7.5 4.8-4.2 3.2 2.6c5-.4 10.2 3.5 11.4 10.6 1 5.6-1 10.5-3.4 13.5l3.3 3.6H12z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
-        <path d="M24 12.5c3.5 1.8 5.8 6.5 5.2 12.5-.5 4.5-2.6 7.4-5.2 9.2" fill="none" stroke="${accent}" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="19.5" cy="16.5" r="1.8" fill="${accent}"/>
-        <rect x="11.5" y="35.5" width="22" height="3.5" rx="1.4" fill="${shade}" stroke="${stroke}" stroke-width="1.6"/>`,
-    B: `<ellipse cx="22.5" cy="39.5" rx="13" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-        <circle cx="22.5" cy="8.2" r="2.8" fill="${accent}" stroke="${stroke}" stroke-width="1.5"/>
-        <path d="M22.5 11.2c-6 3.5-8.5 9.5-6.8 15.8h13.6c1.7-6.3-.8-12.3-6.8-15.8z" fill="${fill}" stroke="${stroke}" stroke-width="1.9"/>
-        <path d="M18.8 19.2h7.4M22.5 15.5v7.4" stroke="${accent}" stroke-width="2.3" stroke-linecap="round"/>
-        <rect x="15" y="27" width="15" height="3" rx="1.2" fill="${accent}" stroke="${stroke}" stroke-width="1.2"/>
-        <path d="M11.5 36.2c2.2-3.5 6.2-5 11-5s8.8 1.5 11 5v3.2h-22v-3.2z" fill="${shade}" stroke="${stroke}" stroke-width="1.9"/>`,
-    Q: `<ellipse cx="22.5" cy="39.5" rx="14" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-        <path d="M8.5 14.5l6.2 13.5 7.8-16.5L30.3 28l6.2-13.5-3.2 19.5H11.7L8.5 14.5z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
-        <circle cx="8.5" cy="12.5" r="2.5" fill="${accent}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="15.5" cy="10.2" r="2.2" fill="${accent}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="22.5" cy="8.5" r="2.8" fill="${accent}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="29.5" cy="10.2" r="2.2" fill="${accent}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="36.5" cy="12.5" r="2.5" fill="${accent}" stroke="${stroke}" stroke-width="1.2"/>
-        <rect x="11" y="33.8" width="23" height="5.4" rx="2" fill="${shade}" stroke="${stroke}" stroke-width="1.9"/>
-        <line x1="13" y1="31.2" x2="32" y2="31.2" stroke="${accent}" stroke-width="2.2"/>`,
-    K: `<ellipse cx="22.5" cy="39.5" rx="14" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-        <path d="M22.5 5.2v9.2M18 9.2h9" stroke="${accent}" stroke-width="3" stroke-linecap="round"/>
-        <path d="M13.5 30c-4.5-4.5-4.5-11.8 2-14.2 3.2-1.2 5.4.8 7 3.2 1.6-2.4 3.8-4.4 7-3.2 6.5 2.4 6.5 9.7 2 14.2l1.2 4.2H12.3l1.2-4.2z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/>
-        <line x1="22.5" y1="18.5" x2="22.5" y2="31" stroke="${accent}" stroke-width="2"/>
-        <rect x="11" y="34" width="23" height="5.4" rx="2" fill="${shade}" stroke="${stroke}" stroke-width="1.9"/>`
-  };
-
-  return `<svg viewBox="0 0 45 45" aria-hidden="true">${shapes[type] || ''}</svg>`;
-}
 
 class ChessApp {
   constructor() {
@@ -72,16 +20,30 @@ class ChessApp {
     this.selected = null;
     this.legalForSelected = [];
     this.showAttackMap = false;
-    this.showThreatLines = true;
+    this.showThreatLines = false; // Tablero limpio por defecto
     this.aiBusy = false;
     this.isAnimating = false;
     this.hiddenSquares = new Set();
     this.pendingPromo = null;
 
-    this.pieceRenderer = defaultPieceSvg;
+    this.pieceRenderer = THEMES.neon.renderPiece;
 
     this._cacheDom();
     this.fx = new CombatFX(this.dom.fxCanvas, this.dom.boardWrapper);
+
+    // Sincronizar botón de miras: desactivado por defecto y enfocado solo a tu pieza seleccionada
+    this.dom.btnThreatLines.classList.remove('active');
+    this.dom.btnThreatLines.textContent = '🎯 Mira al Seleccionar';
+
+    // Montar gestor de temas (Madera, Marfil, Gótico, Ajedrez Mágico, Neón)
+    this.themes = new ThemeManager({
+      slotEl: this.dom.themeSlot,
+      onThemeChange: (theme) => {
+        this.fx.setPalette(theme.fxPalette);
+        this.setPieceRenderer(theme.renderPiece);
+      }
+    });
+
     this._bindEvents();
     this._syncInputs();
     this.render();
@@ -91,6 +53,7 @@ class ChessApp {
     const $ = (id) => document.getElementById(id);
     this.dom = {
       modeSelect: $('mode-select'),
+      themeSlot: $('theme-slot'),
       btnRandom960: $('btn-random-960'),
       posInput: $('pos-input'),
       btnLoadPos: $('btn-load-pos'),
@@ -171,7 +134,6 @@ class ChessApp {
       this.dom.btnSound.textContent = on ? '🔊 Sonido' : '🔇 Silencio';
     });
 
-    // Vista previa interactiva con piezas fantasma y sonido completo
     this.dom.fxPreviewGrid.addEventListener('click', (e) => {
       const btn = e.target.closest('.fx-btn');
       if (!btn) return;
@@ -219,8 +181,8 @@ class ChessApp {
   }
 
   setPieceRenderer(fn) {
-    this.pieceRenderer = fn || defaultPieceSvg;
-    this.render();
+    this.pieceRenderer = fn || THEMES.neon.renderPiece;
+    if (this.dom?.boardGrid) this.render();
   }
 
   startNewGame(positionId) {
@@ -395,7 +357,6 @@ class ChessApp {
       return;
     }
 
-    // Movimiento normal fluido
     this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
     this.render();
     this.sound.playMove(record.piece);
@@ -559,25 +520,38 @@ class ChessApp {
     }
   }
 
+  /**
+   * Dibuja líneas de mira SOLO cuando el usuario activa el botón y selecciona una de sus piezas.
+   */
   _renderTacticalLines() {
     const svg = this.dom.tacticalSvg;
     svg.innerHTML = '';
-    if (!this.showThreatLines) return;
+    if (!this.showThreatLines || !this.selected) return;
 
-    const threats = this.engine.getActiveThreats();
+    const captures = [];
+    const seen = new Set();
+    for (const m of this.legalForSelected) {
+      if (!m.captured && !m.ep) continue;
+      const key = `${m.to.r},${m.to.c}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      captures.push(m);
+    }
+
+    if (captures.length === 0) return;
+
     const ns = 'http://www.w3.org/2000/svg';
+    const vr1 = this.flipped ? 7 - this.selected.r : this.selected.r;
+    const vc1 = this.flipped ? 7 - this.selected.c : this.selected.c;
+    const x1 = vc1 * 100 + 50;
+    const y1 = vr1 * 100 + 50;
 
-    for (const th of threats) {
-      const vr1 = this.flipped ? 7 - th.from.r : th.from.r;
-      const vc1 = this.flipped ? 7 - th.from.c : th.from.c;
-      const vr2 = this.flipped ? 7 - th.to.r : th.to.r;
-      const vc2 = this.flipped ? 7 - th.to.c : th.to.c;
-
-      const x1 = vc1 * 100 + 50;
-      const y1 = vr1 * 100 + 50;
+    for (const m of captures) {
+      const vr2 = this.flipped ? 7 - m.to.r : m.to.r;
+      const vc2 = this.flipped ? 7 - m.to.c : m.to.c;
       const x2 = vc2 * 100 + 50;
       const y2 = vr2 * 100 + 50;
-      const stroke = th.color === 'w' ? 'rgba(56, 189, 248, 0.52)' : 'rgba(244, 63, 94, 0.55)';
+      const stroke = 'rgba(244, 63, 94, 0.78)';
 
       const line = document.createElementNS(ns, 'line');
       line.setAttribute('x1', x1);
@@ -585,17 +559,17 @@ class ChessApp {
       line.setAttribute('x2', x2);
       line.setAttribute('y2', y2);
       line.setAttribute('stroke', stroke);
-      line.setAttribute('stroke-width', '4');
+      line.setAttribute('stroke-width', '4.5');
       line.setAttribute('stroke-dasharray', '10 7');
       svg.appendChild(line);
 
       const reticle = document.createElementNS(ns, 'circle');
       reticle.setAttribute('cx', x2);
       reticle.setAttribute('cy', y2);
-      reticle.setAttribute('r', '26');
+      reticle.setAttribute('r', '28');
       reticle.setAttribute('fill', 'none');
       reticle.setAttribute('stroke', stroke);
-      reticle.setAttribute('stroke-width', '3');
+      reticle.setAttribute('stroke-width', '3.5');
       svg.appendChild(reticle);
     }
   }
