@@ -4,6 +4,7 @@ import { CombatFX } from './fx.js';
 import { ChessAI } from './ai.js';
 import { ThemeManager, THEMES } from './themes.js';
 import { FischerClock } from './clock.js';
+import { GameAnalyzer, CLASS_META } from './analyzer.js';
 
 const UNICODE_CAPTURED = {
   w: { P: '♙', N: '♘', B: '♗', R: '♖', Q: '♕', K: '♔' },
@@ -27,15 +28,20 @@ class ChessApp {
     this.hiddenSquares = new Set();
     this.pendingPromo = null;
 
+    // Estado de revisión post-partida (null durante juego normal)
+    this.reviewFrame = null;
+    this.analysisResults = null;
+
     this.pieceRenderer = THEMES.neon.renderPiece;
 
     this._cacheDom();
+    this._mountResignButton();
     this.fx = new CombatFX(this.dom.fxCanvas, this.dom.boardWrapper);
 
     this.dom.btnThreatLines.classList.remove('active');
     this.dom.btnThreatLines.textContent = '🎯 Mira al Seleccionar';
 
-    // Fase 2: Gestor de Temas (incluye Harry Potter)
+    // Fase 2: Gestor de Temas
     this.themes = new ThemeManager({
       slotEl: this.dom.themeSlot,
       onThemeChange: (theme) => {
@@ -44,7 +50,7 @@ class ChessApp {
       }
     });
 
-    // Fase 3: Reloj con Incremento Fischer (desactivado por defecto vs IA, activo en 2 Jugadores / Online)
+    // Fase 3: Reloj con Incremento Fischer
     this.clock = new FischerClock({
       topSlotEl: this.dom.clockTopSlot,
       bottomSlotEl: this.dom.clockBottomSlot,
@@ -52,6 +58,26 @@ class ChessApp {
       onTimeout: (loser, winner) => this._handleTimeout(loser, winner)
     });
     this.clock.applyModeDefault(this.mode);
+
+    // Fase 4: Analizador Post-Partida
+    this.analyzer = new GameAnalyzer({
+      postgameSlotEl: this.dom.postgameSlot,
+      modalActionsEl: this.dom.gameoverActions,
+      onAnalysisReady: (results) => {
+        this.analysisResults = results;
+        this._renderStatusAndHistory();
+      },
+      onReviewStep: (frame) => {
+        this.reviewFrame = frame;
+        this.selected = null;
+        this.legalForSelected = [];
+        this.render();
+      },
+      onExitReview: () => {
+        this.reviewFrame = null;
+        this.render();
+      }
+    });
 
     this._bindEvents();
     this._syncInputs();
@@ -65,6 +91,8 @@ class ChessApp {
       themeSlot: $('theme-slot'),
       clockTopSlot: $('clock-top-slot'),
       clockBottomSlot: $('clock-bottom-slot'),
+      postgameSlot: $('postgame-slot'),
+      gameoverActions: $('gameover-actions'),
       btnRandom960: $('btn-random-960'),
       posInput: $('pos-input'),
       btnLoadPos: $('btn-load-pos'),
@@ -102,12 +130,25 @@ class ChessApp {
     };
   }
 
+  _mountResignButton() {
+    const toolbar = document.querySelector('.board-toolbar');
+    if (!toolbar) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-resign';
+    btn.className = 'btn btn-ghost';
+    btn.textContent = '🏳 Rendirse';
+    btn.title = 'Finalizar partida para analizar tus jugadas';
+    btn.addEventListener('click', () => this.handleResign());
+    toolbar.appendChild(btn);
+    this.dom.btnResign = btn;
+  }
+
   _bindEvents() {
     this.dom.modeSelect.addEventListener('change', (e) => {
       this.mode = e.target.value;
       this.clock.applyModeDefault(this.mode);
       this._updatePlayerLabels();
-      if (this._isAiTurn() && !this.isAnimating) this._scheduleAiMove();
+      if (this._isAiTurn() && !this.isAnimating && !this.reviewFrame) this._scheduleAiMove();
     });
 
     this.dom.btnRandom960.addEventListener('click', () => {
@@ -204,6 +245,9 @@ class ChessApp {
     this.hiddenSquares.clear();
     this.selected = null;
     this.legalForSelected = [];
+    this.reviewFrame = null;
+    this.analysisResults = null;
+    this.analyzer.reset();
     this.engine.reset(positionId);
     this.clock.reset();
     this._syncInputs();
@@ -233,6 +277,7 @@ class ChessApp {
   }
 
   handleSquareClick(r, c) {
+    if (this.reviewFrame) return;
     if (this.aiBusy || this.isAnimating || this.engine.status !== 'playing') return;
     if (this._isAiTurn()) return;
 
@@ -308,7 +353,6 @@ class ChessApp {
     this.isAnimating = true;
     this.hiddenSquares.clear();
 
-    // Pausa justa durante la animación para que los efectos no consuman tiempo
     this.clock.pause();
 
     const finishMove = () => {
@@ -326,7 +370,6 @@ class ChessApp {
         return;
       }
 
-      // Suma incremento Fischer al que movió y arranca el reloj del siguiente turno
       this.clock.onMoveCompleted(moverColor, this.engine.turn);
 
       if (this._isAiTurn()) {
@@ -410,6 +453,9 @@ class ChessApp {
   handleUndo() {
     if (this.aiBusy || this.isAnimating || this.engine.history.length === 0) return;
     this.dom.gameoverModal.classList.add('hidden');
+    this.reviewFrame = null;
+    this.analysisResults = null;
+    this.analyzer.reset();
 
     if (this.mode !== 'pvp' && this.engine.turn === 'w' && this.engine.history.length >= 2) {
       this.engine.undo();
@@ -422,6 +468,29 @@ class ChessApp {
     this.legalForSelected = [];
     this.clock.syncTurnAfterUndo(this.engine.turn);
     this.render();
+  }
+
+  handleResign() {
+    if (this.aiBusy || this.isAnimating || this.engine.status !== 'playing' || this.engine.history.length === 0) {
+      return;
+    }
+    const loser = this.mode === 'pvp' ? this.engine.turn : 'w';
+    const winner = loser === 'w' ? 'b' : 'w';
+    this.engine.status = 'resigned';
+    this.engine.winner = winner;
+    this.clock.stop();
+    this.selected = null;
+    this.legalForSelected = [];
+    this.render();
+
+    const winText = winner === 'w' ? 'Blancas' : 'Negras';
+    const loseText = loser === 'w' ? 'Blancas' : 'Negras';
+    this.sound.playGameOver(false);
+
+    this.dom.gameoverTitle.textContent = `🏳 Rendición — Ganan ${winText}`;
+    this.dom.gameoverSubtitle.textContent = `Las ${loseText} se rindieron tras ${this.engine.history.length} medias jugadas. Ya puedes analizar la partida.`;
+    this.analyzer.onGameOver(this.engine);
+    this.dom.gameoverModal.classList.remove('hidden');
   }
 
   _handleTimeout(loser, winner) {
@@ -439,6 +508,7 @@ class ChessApp {
 
     this.dom.gameoverTitle.textContent = `⏱ ¡Tiempo Agotado! Ganan ${winText}`;
     this.dom.gameoverSubtitle.textContent = `A las ${loseText} se les acabó el reloj Fischer en la posición #${this.engine.positionId}.`;
+    this.analyzer.onGameOver(this.engine);
     this.dom.gameoverModal.classList.remove('hidden');
   }
 
@@ -458,6 +528,7 @@ class ChessApp {
 
     this.dom.gameoverTitle.textContent = title;
     this.dom.gameoverSubtitle.textContent = subtitle;
+    this.analyzer.onGameOver(this.engine);
     this.dom.gameoverModal.classList.remove('hidden');
   }
 
@@ -487,10 +558,13 @@ class ChessApp {
     const grid = this.dom.boardGrid;
     grid.innerHTML = '';
 
-    const attackMap = this.showAttackMap ? this.engine.getAttackMap() : null;
-    const lastMove = this.engine.history[this.engine.history.length - 1] || null;
-    const checkKing = this.engine.isInCheck(this.engine.turn)
-      ? this.engine.findKing(this.engine.turn)
+    const activeEngine = this.reviewFrame ? this.reviewFrame.engine : this.engine;
+    const attackMap = this.showAttackMap ? activeEngine.getAttackMap() : null;
+    const lastMove = this.reviewFrame
+      ? this.reviewFrame.lastMove
+      : (this.engine.history[this.engine.history.length - 1] || null);
+    const checkKing = activeEngine.isInCheck(activeEngine.turn)
+      ? activeEngine.findKing(activeEngine.turn)
       : null;
 
     for (let vr = 0; vr < 8; vr++) {
@@ -507,7 +581,7 @@ class ChessApp {
           if (lastMove.to.r === r && toCol === c) sq.classList.add('last-to');
         }
 
-        if (this.selected && this.selected.r === r && this.selected.c === c) {
+        if (!this.reviewFrame && this.selected && this.selected.r === r && this.selected.c === c) {
           sq.classList.add('selected');
         }
 
@@ -522,15 +596,17 @@ class ChessApp {
           else if (cell.b) sq.classList.add('atk-b');
         }
 
-        const matching = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c);
-        const castleMatch = matching.find(m => m.castle);
-        if (castleMatch) {
-          sq.classList.add('castle-target');
-        } else if (matching.length > 0) {
-          const isCap = matching.some(m => m.captured || m.ep);
-          const marker = document.createElement('div');
-          marker.className = isCap ? 'capture-ring' : 'move-dot';
-          sq.appendChild(marker);
+        if (!this.reviewFrame) {
+          const matching = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c);
+          const castleMatch = matching.find(m => m.castle);
+          if (castleMatch) {
+            sq.classList.add('castle-target');
+          } else if (matching.length > 0) {
+            const isCap = matching.some(m => m.captured || m.ep);
+            const marker = document.createElement('div');
+            marker.className = isCap ? 'capture-ring' : 'move-dot';
+            sq.appendChild(marker);
+          }
         }
 
         if (vc === 0) {
@@ -546,8 +622,9 @@ class ChessApp {
           sq.appendChild(fileEl);
         }
 
-        const piece = this.engine.board[r][c];
-        if (piece && !this.hiddenSquares.has(`${r},${c}`)) {
+        const piece = activeEngine.board[r][c];
+        const isHidden = !this.reviewFrame && this.hiddenSquares.has(`${r},${c}`);
+        if (piece && !isHidden) {
           const wrap = document.createElement('div');
           wrap.className = 'piece-wrap';
           wrap.innerHTML = this.pieceRenderer(piece.type, piece.color);
@@ -563,6 +640,13 @@ class ChessApp {
   _renderTacticalLines() {
     const svg = this.dom.tacticalSvg;
     svg.innerHTML = '';
+
+    // En modo revisión, el analizador dibuja su flecha verde de Mejor Jugada y la insignia
+    if (this.reviewFrame) {
+      this.analyzer.renderBoardOverlay(svg, this.flipped);
+      return;
+    }
+
     if (!this.showThreatLines || !this.selected) return;
 
     const captures = [];
@@ -612,52 +696,98 @@ class ChessApp {
   }
 
   _renderStatusAndHistory() {
-    const turnName = this.engine.turn === 'w' ? 'Blancas' : 'Negras';
-    this.dom.turnPill.textContent = `Turno: ${turnName}`;
+    const activeEngine = this.reviewFrame ? this.reviewFrame.engine : this.engine;
+    const turnName = activeEngine.turn === 'w' ? 'Blancas' : 'Negras';
 
-    if (this.engine.status === 'playing') {
-      if (this.engine.isInCheck(this.engine.turn)) {
-        this.dom.statusText.textContent = `¡Jaque a las ${turnName}! Debes proteger al Rey.`;
-      } else {
-        this.dom.statusText.textContent =
-          'Selecciona una pieza. Para enroque 960, toca el Rey y luego su Torre iluminada en dorado.';
-      }
-    } else if (this.engine.status === 'checkmate') {
-      this.dom.statusText.textContent = `Jaque mate. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
-    } else if (this.engine.status === 'timeout') {
-      this.dom.statusText.textContent = `Tiempo agotado. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
+    if (this.dom.btnResign) {
+      const canResign = this.engine.status === 'playing' && this.engine.history.length > 0 && !this.reviewFrame;
+      this.dom.btnResign.disabled = !canResign;
+      this.dom.btnResign.style.opacity = canResign ? '1' : '0.4';
+    }
+
+    if (this.reviewFrame) {
+      this.dom.turnPill.textContent = `Revisión: Jugada ${this.reviewFrame.ply}/${this.engine.history.length}`;
+      this.dom.statusText.textContent = 'Modo Revisión Post-Partida activo. Usa ◀ ▶ o toca cualquier jugada en el historial.';
     } else {
-      this.dom.statusText.textContent = 'Partida finalizada en tablas.';
+      this.dom.turnPill.textContent = `Turno: ${turnName}`;
+      if (this.engine.status === 'playing') {
+        if (this.engine.isInCheck(this.engine.turn)) {
+          this.dom.statusText.textContent = `¡Jaque a las ${turnName}! Debes proteger al Rey.`;
+        } else {
+          this.dom.statusText.textContent =
+            'Selecciona una pieza. Para enroque 960, toca el Rey y luego su Torre iluminada en dorado.';
+        }
+      } else if (this.engine.status === 'checkmate') {
+        this.dom.statusText.textContent = `Jaque mate. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
+      } else if (this.engine.status === 'timeout') {
+        this.dom.statusText.textContent = `Tiempo agotado. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
+      } else if (this.engine.status === 'resigned') {
+        this.dom.statusText.textContent = `Rendición. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
+      } else {
+        this.dom.statusText.textContent = 'Partida finalizada en tablas.';
+      }
     }
 
     const topColor = this.flipped ? 'w' : 'b';
     const bottomColor = this.flipped ? 'b' : 'w';
     const capRender = (byColor) => {
       const victimColor = byColor === 'w' ? 'b' : 'w';
-      return this.engine.captured[byColor].map(t => UNICODE_CAPTURED[victimColor][t]).join('');
+      return activeEngine.captured[byColor].map(t => UNICODE_CAPTURED[victimColor][t]).join('');
     };
 
     this.dom.capturedTop.textContent = capRender(topColor);
     this.dom.capturedBottom.textContent = capRender(bottomColor);
 
-    const bal = this.engine.getMaterialBalance();
+    const bal = activeEngine.getMaterialBalance();
     const topBal = topColor === 'w' ? bal : -bal;
     const bottomBal = bottomColor === 'w' ? bal : -bal;
     this.dom.materialTop.textContent = topBal > 0 ? `+${topBal}` : '';
     this.dom.materialBottom.textContent = bottomBal > 0 ? `+${bottomBal}` : '';
 
+    // Historial (enriquecido con insignias y clics cuando existe análisis)
     const list = this.dom.movesList;
     list.innerHTML = '';
+
+    const buildCell = (plyIdx, san) => {
+      const span = document.createElement('span');
+      span.className = 'move-cell';
+      if (!san) return span;
+
+      span.textContent = san;
+      const res = this.analysisResults ? this.analysisResults[plyIdx] : null;
+      if (res) {
+        const meta = CLASS_META[res.classification];
+        const tag = document.createElement('span');
+        tag.className = 'move-tag';
+        tag.textContent = meta.code;
+        tag.style.color = meta.color;
+        tag.style.background = meta.bg;
+        span.appendChild(tag);
+        span.classList.add('clickable');
+        if (this.reviewFrame && this.reviewFrame.ply === plyIdx + 1) {
+          span.classList.add('review-active');
+        }
+        span.addEventListener('click', () => this.analyzer.goToPly(plyIdx + 1));
+      }
+      return span;
+    };
+
     for (let i = 0; i < this.engine.history.length; i += 2) {
       const row = document.createElement('div');
       row.className = 'move-row';
-      const num = Math.floor(i / 2) + 1;
-      const wSan = this.engine.history[i]?.san || '';
-      const bSan = this.engine.history[i + 1]?.san || '';
-      row.innerHTML = `<span class="move-num">${num}.</span><span>${wSan}</span><span>${bSan}</span>`;
+      const num = document.createElement('span');
+      num.className = 'move-num';
+      num.textContent = `${Math.floor(i / 2) + 1}.`;
+
+      row.appendChild(num);
+      row.appendChild(buildCell(i, this.engine.history[i]?.san || ''));
+      row.appendChild(buildCell(i + 1, this.engine.history[i + 1]?.san || ''));
       list.appendChild(row);
     }
-    list.scrollTop = list.scrollHeight;
+
+    if (!this.reviewFrame) {
+      list.scrollTop = list.scrollHeight;
+    }
   }
 }
 
