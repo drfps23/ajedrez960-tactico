@@ -1,6 +1,8 @@
 import { Chess960Engine, PIECE_VALUES, sqName } from './engine.js';
 import { ChessAI } from './ai.js';
 
+const VOICE_STORAGE_KEY = 'ajedrez960_coach_voice_v1';
+
 const PIECE_ES = {
   P: 'Peón',
   N: 'Caballo',
@@ -19,15 +21,160 @@ const PIECE_GEN = {
   K: 'tu Rey'
 };
 
-export const CLASS_META = {
-  brilliant:  { code: '!!', label: 'Brillante',   color: '#22d3ee', bg: 'rgba(34, 211, 238, 0.16)' },
-  best:       { code: '★',  label: 'Mejor jugada', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.16)' },
-  excellent:  { code: '!',  label: 'Excelente',   color: '#4ade80', bg: 'rgba(74, 222, 128, 0.14)' },
-  good:       { code: '✓',  label: 'Buena',       color: '#86efac', bg: 'rgba(134, 239, 172, 0.12)' },
-  inaccuracy: { code: '?!', label: 'Imprecisión', color: '#facc15', bg: 'rgba(250, 204, 21, 0.16)' },
-  mistake:    { code: '?',  label: 'Error',       color: '#fb923c', bg: 'rgba(251, 146, 60, 0.18)' },
-  blunder:    { code: '??', label: 'Error grave', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.20)' }
+const SAN_PIECE_NAME = {
+  C: 'Caballo',
+  A: 'Alfil',
+  T: 'Torre',
+  D: 'Dama',
+  R: 'Rey'
 };
+
+export const CLASS_META = {
+  brilliant:  { code: '!!', label: 'Brillante',    color: '#22d3ee', bg: 'rgba(34, 211, 238, 0.16)' },
+  best:       { code: '★',  label: 'Mejor jugada', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.16)' },
+  excellent:  { code: '!',  label: 'Excelente',    color: '#4ade80', bg: 'rgba(74, 222, 128, 0.14)' },
+  good:       { code: '✓',  label: 'Buena',        color: '#86efac', bg: 'rgba(134, 239, 172, 0.12)' },
+  inaccuracy: { code: '?!', label: 'Imprecisión',  color: '#facc15', bg: 'rgba(250, 204, 21, 0.16)' },
+  mistake:    { code: '?',  label: 'Error',        color: '#fb923c', bg: 'rgba(251, 146, 60, 0.18)' },
+  blunder:    { code: '??', label: 'Error grave',  color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.20)' }
+};
+
+/**
+ * Convierte notación algebraica en español (ej. Cxf6+, O-O, Dxg2#, e8=D) a frase natural hablada.
+ */
+function sanToSpanishSpeech(san) {
+  if (!san) return '';
+  let text = san.trim();
+  let suffix = '';
+
+  if (text.endsWith('#')) {
+    suffix = ', jaque mate';
+    text = text.slice(0, -1);
+  } else if (text.endsWith('+')) {
+    suffix = ', jaque';
+    text = text.slice(0, -1);
+  }
+
+  if (text === 'O-O-O') return `enroque largo${suffix}`;
+  if (text === 'O-O') return `enroque corto${suffix}`;
+
+  let promoSpeech = '';
+  const promoMatch = text.match(/=([CATD])$/);
+  if (promoMatch) {
+    promoSpeech = ` coronando a ${SAN_PIECE_NAME[promoMatch[1]] || promoMatch[1]}`;
+    text = text.replace(/=[CATD]$/, '');
+  }
+
+  // Pieza mayor o menor: C, A, T, D, R
+  const pieceMatch = text.match(/^([CATDR])([a-h]?[1-8]?)(x?)([a-h][1-8])$/);
+  if (pieceMatch) {
+    const [, pLetter, disamb, cap, dest] = pieceMatch;
+    const pName = SAN_PIECE_NAME[pLetter] || pLetter;
+    const fromPart = disamb ? ` de ${disamb}` : '';
+    const action = cap ? ' captura en ' : ' a ';
+    return `${pName}${fromPart}${action}${dest}${promoSpeech}${suffix}`;
+  }
+
+  // Captura de peón: exd5
+  const pawnCap = text.match(/^([a-h])x([a-h][1-8])$/);
+  if (pawnCap) {
+    return `peón de ${pawnCap[1]} captura en ${pawnCap[2]}${promoSpeech}${suffix}`;
+  }
+
+  // Avance simple de peón: e4
+  const pawnPush = text.match(/^([a-h][1-8])$/);
+  if (pawnPush) {
+    return `peón a ${pawnPush[1]}${promoSpeech}${suffix}`;
+  }
+
+  return `${text}${promoSpeech}${suffix}`;
+}
+
+/**
+ * Reemplaza jugadas algebraicas incrustadas en un texto para que el narrador las lea con naturalidad.
+ */
+function humanizeTextForSpeech(rawText) {
+  if (!rawText) return '';
+  const tokenRegex = /\b(O-O-O|O-O|[CATDR][a-h]?[1-8]?x?[a-h][1-8](?:=[CATD])?[+#]?|[a-h]x[a-h][1-8](?:=[CATD])?[+#]?|[a-h][1-8](?:=[CATD])?[+#]?)\b/g;
+  return rawText.replace(tokenRegex, (match) => sanToSpanishSpeech(match));
+}
+
+class VoiceCoach {
+  constructor() {
+    this.supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+    this.enabled = this._loadPref();
+    this.voice = null;
+
+    if (this.supported) {
+      this._pickSpanishVoice();
+      window.speechSynthesis.addEventListener?.('voiceschanged', () => this._pickSpanishVoice());
+    }
+  }
+
+  _loadPref() {
+    try {
+      const saved = localStorage.getItem(VOICE_STORAGE_KEY);
+      if (saved === 'off') return false;
+    } catch {
+      // ignorar
+    }
+    return true;
+  }
+
+  _pickSpanishVoice() {
+    if (!this.supported) return;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const esVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith('es'));
+    if (esVoices.length === 0) return;
+
+    // Priorizar voces naturales en español (Google / Microsoft / latinoamérica / España)
+    const preferred =
+      esVoices.find(v => /google|natural|sabina|paulina|dalia|elena|monica/i.test(v.name)) ||
+      esVoices.find(v => /es-(us|mx|ve|do|co|es)/i.test(v.lang)) ||
+      esVoices[0];
+
+    this.voice = preferred || null;
+  }
+
+  toggle() {
+    this.enabled = !this.enabled;
+    try {
+      localStorage.setItem(VOICE_STORAGE_KEY, this.enabled ? 'on' : 'off');
+    } catch {
+      // ignorar
+    }
+    if (!this.enabled) this.stop();
+    return this.enabled;
+  }
+
+  stop() {
+    if (!this.supported) return;
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignorar
+    }
+  }
+
+  speak(text, force = false) {
+    if (!this.supported || (!this.enabled && !force) || !text) return;
+    this.stop();
+
+    if (!this.voice) this._pickSpanishVoice();
+
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = this.voice?.lang || 'es-ES';
+    if (this.voice) utter.voice = this.voice;
+    utter.rate = 1.03;
+    utter.pitch = 1.0;
+
+    try {
+      window.speechSynthesis.speak(utter);
+    } catch {
+      // ignorar si el navegador bloquea la reproducción sin gesto previo
+    }
+  }
+}
 
 function ensureAnalyzerStyles() {
   if (document.querySelector('style[data-analyzer-css]')) return;
@@ -172,6 +319,30 @@ function ensureAnalyzerStyles() {
       cursor: default;
     }
 
+    .an-voice-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .an-voice-btn {
+      background: rgba(15, 23, 42, 0.75);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 7px;
+      padding: 6px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .an-voice-btn.active {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+    .an-voice-btn:hover {
+      border-color: var(--accent-cyan);
+    }
+
     .an-coach {
       background: rgba(9, 13, 22, 0.65);
       border: 1px solid var(--border-color);
@@ -218,7 +389,6 @@ function ensureAnalyzerStyles() {
       font-size: 0.77rem;
     }
 
-    /* Celdas del historial clickeables durante la revisión */
     .move-cell {
       display: inline-flex;
       align-items: center;
@@ -226,12 +396,8 @@ function ensureAnalyzerStyles() {
       padding: 2px 5px;
       border-radius: 5px;
     }
-    .move-cell.clickable {
-      cursor: pointer;
-    }
-    .move-cell.clickable:hover {
-      background: rgba(148, 163, 184, 0.16);
-    }
+    .move-cell.clickable { cursor: pointer; }
+    .move-cell.clickable:hover { background: rgba(148, 163, 184, 0.16); }
     .move-cell.review-active {
       background: rgba(56, 189, 248, 0.25);
       outline: 1px solid var(--accent-cyan);
@@ -304,6 +470,7 @@ export class GameAnalyzer {
     this.onAnalysisReady = onAnalysisReady;
 
     this.ai = new ChessAI();
+    this.voice = new VoiceCoach();
     this.reset();
     this._bindKeyboard();
   }
@@ -330,11 +497,12 @@ export class GameAnalyzer {
 
   reset() {
     this._runToken = (this._runToken || 0) + 1;
+    this.voice?.stop();
     this.analyzing = false;
     this.inReview = false;
     this.positionId = null;
-    this.frames = [];   // frames[0] = tablero inicial, frames[k] = tablero tras jugada k-1
-    this.results = [];  // results[k] = análisis de la jugada k (0-indexed)
+    this.frames = [];
+    this.results = [];
     this.summary = null;
     this.currentPly = 0;
 
@@ -348,16 +516,12 @@ export class GameAnalyzer {
     if (old) old.remove();
   }
 
-  /**
-   * Llamar únicamente cuando la partida ha terminado.
-   */
   onGameOver(engine) {
     this.reset();
     if (!engine || engine.history.length === 0) return;
 
     this._sourceEngine = engine;
 
-    // Botón en el modal de Fin de Partida
     if (this.modalActionsEl) {
       const btn = document.createElement('button');
       btn.className = 'btn btn-primary';
@@ -372,11 +536,10 @@ export class GameAnalyzer {
       this.modalActionsEl.prepend(btn);
     }
 
-    // Botón en el panel lateral
     if (this.postgameSlotEl) {
       this.postgameSlotEl.innerHTML = `
         <div class="an-box">
-          <button class="an-launch-btn" id="an-launch-panel">📊 Analizar Partida Jugada por Jugada</button>
+          <button class="an-launch-btn" id="an-launch-panel">📊 Analizar Partida (con Voz)</button>
         </div>
       `;
       this.postgameSlotEl.querySelector('#an-launch-panel')?.addEventListener('click', () => {
@@ -388,6 +551,7 @@ export class GameAnalyzer {
   async startAnalysis(engine) {
     if (!engine || engine.history.length === 0) return;
     const token = ++this._runToken;
+    this.voice.stop();
     this.analyzing = true;
     this.inReview = false;
     this.positionId = engine.positionId;
@@ -395,7 +559,6 @@ export class GameAnalyzer {
     const history = engine.history.map(h => ({ ...h }));
     const total = history.length;
 
-    // Reconstruir estados exactos paso a paso sin alterar el motor original
     const sim = new Chess960Engine(engine.positionId);
     this.frames = [{ engine: sim.clone(), lastMove: null }];
     this.results = [];
@@ -430,8 +593,6 @@ export class GameAnalyzer {
       else bLosses.push(analysis.cpLoss);
 
       this._renderProgress(i + 1, total);
-
-      // Ceder el hilo al navegador para mantener la UI fluida
       await new Promise(resolve => setTimeout(resolve, 12));
     }
 
@@ -458,13 +619,11 @@ export class GameAnalyzer {
     const maximizing = color === 'w';
     const legalMoves = beforeEngine.getLegalMoves(color);
 
-    // Evaluar cada jugada legal con búsqueda alfa-beta (profundidad 2) para hallar la mejor respuesta
     const scored = [];
     let bestMove = legalMoves[0] || played;
     let bestRaw = maximizing ? -Infinity : Infinity;
     let playedRaw = null;
 
-    // Ordenar capturas y promociones primero para mejor poda
     const ordered = [...legalMoves].sort((a, b) => {
       const sa = (a.captured ? PIECE_VALUES[a.captured] * 10 - PIECE_VALUES[a.piece] : 0) + (a.promo ? 800 : 0);
       const sb = (b.captured ? PIECE_VALUES[b.captured] * 10 - PIECE_VALUES[b.piece] : 0) + (b.promo ? 800 : 0);
@@ -478,27 +637,19 @@ export class GameAnalyzer {
       const next = beforeEngine.clone();
       next.makeMove(m);
 
-      // Para la jugada realmente hecha por el jugador, evaluar sin poda para obtener su valor exacto
       const isPlayed = sameMove(m, played);
       const val = isPlayed
         ? this.ai._minimax(next, 1, -Infinity, Infinity, !maximizing, 1)
         : this.ai._minimax(next, 1, alpha, beta, !maximizing, 1);
 
       scored.push({ move: m, val });
-
       if (isPlayed) playedRaw = val;
 
       if (maximizing) {
-        if (val > bestRaw) {
-          bestRaw = val;
-          bestMove = m;
-        }
+        if (val > bestRaw) { bestRaw = val; bestMove = m; }
         if (val > alpha) alpha = val;
       } else {
-        if (val < bestRaw) {
-          bestRaw = val;
-          bestMove = m;
-        }
+        if (val < bestRaw) { bestRaw = val; bestMove = m; }
         if (val < beta) beta = val;
       }
     }
@@ -509,18 +660,15 @@ export class GameAnalyzer {
       playedRaw = this.ai._minimax(simPlayed, 1, -Infinity, Infinity, !maximizing, 1);
     }
 
-    // Calcular SAN de la mejor jugada
     const bestSim = beforeEngine.clone();
     const bestRecord = bestSim.makeMove(bestMove);
     const bestSan = bestRecord.san;
 
-    // Calcular pérdida en centipeones desde el punto de vista de quien movió
     const bestNorm = normalizeEval(bestRaw);
     const playedNorm = normalizeEval(playedRaw);
     const rawDiff = maximizing ? (bestNorm - playedNorm) : (playedNorm - bestNorm);
     const cpLoss = Math.max(0, Math.round(rawDiff));
 
-    // Evaluar estados resultantes para construir el comentario táctico
     const afterPlayed = beforeEngine.clone();
     afterPlayed.makeMove(played);
 
@@ -528,7 +676,6 @@ export class GameAnalyzer {
     const missedMate = (maximizing ? bestRaw > 90000 : bestRaw < -90000) && !(maximizing ? playedRaw > 90000 : playedRaw < -90000);
     const allowedMate = (maximizing ? playedRaw < -90000 : playedRaw > 90000) && !(maximizing ? bestRaw < -90000 : bestRaw > 90000);
 
-    // Detectar jugada brillante: jugada top/casi top donde la pieza se ofrece en casilla atacada (sacrificio táctico) o única jugada ganadora
     const destR = played.to.r;
     const destC = moveDestCol(played);
     const destAttacked = !played.castle && afterPlayed.isSquareAttacked(destR, destC, enemy);
@@ -612,29 +759,17 @@ export class GameAnalyzer {
     const destSq = sqName(played.to.r, moveDestCol(played));
     const pieceName = PIECE_GEN[played.piece] || 'tu pieza';
 
-    // Razón concreta de por qué el motor recomienda `bestMove`
     const whyBest = () => {
-      if (bestRecord.san.endsWith('#')) {
-        return 'da jaque mate inmediato y cierra la partida';
-      }
-      if (bestMove.castle) {
-        return 'resguarda al Rey de forma segura y conecta las Torres';
-      }
-      if (bestMove.promo) {
-        return `corona el Peón a ${PIECE_ES[bestMove.promo]} ganando ventaja decisiva`;
-      }
+      if (bestRecord.san.endsWith('#')) return 'da jaque mate inmediato y cierra la partida';
+      if (bestMove.castle) return 'resguarda al Rey de forma segura y conecta las Torres';
+      if (bestMove.promo) return `corona el Peón a ${PIECE_ES[bestMove.promo]} ganando ventaja decisiva`;
       if (bestRecord.captured) {
         const capVal = PIECE_VALUES[bestRecord.captured] || 100;
         const atkVal = PIECE_VALUES[bestMove.piece] || 100;
-        if (capVal > atkVal) {
-          return `captura un ${PIECE_ES[bestRecord.captured]} enemigo ganando material limpio`;
-        }
+        if (capVal > atkVal) return `captura un ${PIECE_ES[bestRecord.captured]} enemigo ganando material limpio`;
         return `elimina el ${PIECE_ES[bestRecord.captured]} en ${sqName(bestMove.to.r, bestMove.to.c)} y mejora tu iniciativa`;
       }
-      if (bestRecord.inCheck) {
-        return 'da jaque y obliga al rival a defenderse, manteniendo la iniciativa';
-      }
-      // Comprobar si la mejor jugada salvaba una pieza que estaba amenazada
+      if (bestRecord.inCheck) return 'da jaque y obliga al rival a defenderse, manteniendo la iniciativa';
       const movedFromAttacked = beforeEngine.isSquareAttacked(bestMove.from.r, bestMove.from.c, enemy);
       if (movedFromAttacked && bestMove.piece !== 'P') {
         return `ponía a salvo tu ${PIECE_ES[bestMove.piece]} que estaba bajo ataque`;
@@ -648,12 +783,10 @@ export class GameAnalyzer {
       return 'mantiene mejor coordinación de piezas y evita debilidades tácticas';
     };
 
-    // Caso 1: Jaque mate ejecutado
     if (played.san.endsWith('#')) {
       return `¡Remate impecable! ${played.san} sella el jaque mate sin escapatoria posible.`;
     }
 
-    // Caso 2: Jugadas de error (Imprecisión, Error, Error grave)
     if (classification === 'blunder' || classification === 'mistake' || classification === 'inaccuracy') {
       if (allowedMate) {
         return `Error crítico: ${played.san} deja a tu Rey expuesto a jaque mate forzado. Yo habría jugado ${bestSan}, porque ${whyBest()}.`;
@@ -684,7 +817,6 @@ export class GameAnalyzer {
       return `${played.san} debilita seriamente tu posición y permite un contragolpe rival. Yo habría hecho ${bestSan}, ya que ${whyBest()}.`;
     }
 
-    // Caso 3: Brillante
     if (classification === 'brilliant') {
       if (looksLikeSacrifice) {
         return `¡Golpe táctico brillante! Con ${played.san} sacrificas o expones ${pieceName} en ${destSq} con cálculo exacto, obligando al rival a quedar en desventaja.`;
@@ -692,7 +824,6 @@ export class GameAnalyzer {
       return `¡Jugada brillante! ${played.san} era la única línea ganadora en una posición muy aguda y mantiene el dominio total.`;
     }
 
-    // Caso 4: Mejor jugada / Excelente / Buena
     if (played.castle) {
       return `Muy buena decisión con ${played.san}: proteges al Rey y activas la Torre rápidamente, clave en Ajedrez 960.`;
     }
@@ -709,9 +840,36 @@ export class GameAnalyzer {
       return `Precisión máxima: ${played.san} es exactamente la jugada que elegiría el motor porque ${whyBest()}.`;
     }
     if (classification === 'excellent') {
-      return `Excelente elección: ${played.san} mantiene la iniciativa y la solidez de tu estructura. (Como alternativa muy pareja, también funcionaba ${bestSan}).`;
+      return `Excelente elección: ${played.san} mantiene la iniciativa y la solidez de tu estructura. Como alternativa muy pareja, también funcionaba ${bestSan}.`;
     }
-    return `Jugada correcta y consistente: ${played.san} sostiene bien la posición. (Otra opción ligeramente más activa era ${bestSan}, que ${whyBest()}).`;
+    return `Jugada correcta y consistente: ${played.san} sostiene bien la posición. Otra opción ligeramente más activa era ${bestSan}, que ${whyBest()}.`;
+  }
+
+  _speakCurrentPly(force = false) {
+    if (!this.inReview) return;
+    if (this.currentPly <= 0) {
+      if (force && this.summary) {
+        this.voice.speak(
+          `Posición inicial número ${this.positionId}. Precisión de Blancas: ${this.summary.whiteAcc} por ciento. Precisión de Negras: ${this.summary.blackAcc} por ciento.`,
+          true
+        );
+      } else {
+        this.voice.stop();
+      }
+      return;
+    }
+
+    const item = this.results[this.currentPly - 1];
+    if (!item) return;
+
+    const meta = CLASS_META[item.classification];
+    const moveNum = Math.floor((this.currentPly - 1) / 2) + 1;
+    const side = item.played.color === 'w' ? 'Blancas' : 'Negras';
+    const spokenMove = sanToSpanishSpeech(item.played.san);
+    const spokenComment = humanizeTextForSpeech(item.comment);
+
+    const script = `Jugada ${moveNum}, ${side}: ${spokenMove}. ${meta.label}. ${spokenComment}`;
+    this.voice.speak(script, force);
   }
 
   _renderProgress(done, total) {
@@ -739,6 +897,7 @@ export class GameAnalyzer {
     this.inReview = true;
 
     this._renderReviewPanel();
+    this._speakCurrentPly(false);
 
     if (this.onReviewStep) {
       this.onReviewStep({
@@ -751,6 +910,7 @@ export class GameAnalyzer {
   }
 
   exitReview() {
+    this.voice.stop();
     this.inReview = false;
     if (this.onExitReview) this.onExitReview();
     if (this._sourceEngine) {
@@ -791,7 +951,7 @@ export class GameAnalyzer {
             <span class="an-coach-badge" style="color:var(--accent-cyan);background:rgba(56,189,248,0.16)">INICIO #${this.positionId}</span>
             <span class="an-coach-move">Posición inicial</span>
           </div>
-          <div class="an-coach-body">Usa las flechas ◀ ▶ (o haz clic en cualquier jugada del historial) para revisar el análisis completo.</div>
+          <div class="an-coach-body">Usa las flechas ◀ ▶ (o haz clic en cualquier jugada del historial) para escuchar y leer el análisis completo.</div>
         </div>
       `;
     } else {
@@ -811,6 +971,18 @@ export class GameAnalyzer {
         </div>
       `;
     }
+
+    const voiceOn = this.voice.enabled;
+    const voiceControls = this.voice.supported
+      ? `
+        <div class="an-voice-bar">
+          <button id="an-voice-toggle" class="an-voice-btn ${voiceOn ? 'active' : ''}">
+            ${voiceOn ? '🔊 Voz: ON' : '🔇 Voz: OFF'}
+          </button>
+          <button id="an-voice-replay" class="an-voice-btn">🗣 Repetir Voz</button>
+        </div>
+      `
+      : '';
 
     this.postgameSlotEl.innerHTML = `
       <div class="an-box">
@@ -839,6 +1011,7 @@ export class GameAnalyzer {
           <button id="an-last" ${ply === total ? 'disabled' : ''} title="Final">⏭</button>
         </div>
 
+        ${voiceControls}
         ${coachHtml}
 
         <button class="btn btn-ghost an-exit-btn" id="an-exit">Cerrar Revisión</button>
@@ -850,11 +1023,17 @@ export class GameAnalyzer {
     this.postgameSlotEl.querySelector('#an-next')?.addEventListener('click', () => this.goToPly(ply + 1));
     this.postgameSlotEl.querySelector('#an-last')?.addEventListener('click', () => this.goToPly(total));
     this.postgameSlotEl.querySelector('#an-exit')?.addEventListener('click', () => this.exitReview());
+
+    this.postgameSlotEl.querySelector('#an-voice-toggle')?.addEventListener('click', () => {
+      const active = this.voice.toggle();
+      this._renderReviewPanel();
+      if (active) this._speakCurrentPly(false);
+    });
+    this.postgameSlotEl.querySelector('#an-voice-replay')?.addEventListener('click', () => {
+      this._speakCurrentPly(true);
+    });
   }
 
-  /**
-   * Dibuja sobre el SVG del tablero la flecha verde de Mejor Jugada y la insignia estilo Chess.com.
-   */
   renderBoardOverlay(svg, flipped) {
     if (!svg || !this.inReview) return;
     svg.innerHTML = '';
@@ -898,7 +1077,6 @@ export class GameAnalyzer {
       line.setAttribute('opacity', String(opacity));
       svg.appendChild(line);
 
-      // Punta de flecha geométrica
       const tipX = p2.x - ux * 6;
       const tipY = p2.y - uy * 6;
       const baseX = p2.x - ux * 32;
@@ -907,16 +1085,12 @@ export class GameAnalyzer {
       const py = ux * 16;
 
       const head = document.createElementNS(ns, 'polygon');
-      head.setAttribute(
-        'points',
-        `${tipX},${tipY} ${baseX + px},${baseY + py} ${baseX - px},${baseY - py}`
-      );
+      head.setAttribute('points', `${tipX},${tipY} ${baseX + px},${baseY + py} ${baseX - px},${baseY - py}`);
       head.setAttribute('fill', color);
       head.setAttribute('opacity', String(opacity));
       svg.appendChild(head);
     };
 
-    // Si la jugada no fue la mejor y hubo imprecisión/error, mostrar flecha verde con la recomendación del motor
     if (!item.isExactBest && ['inaccuracy', 'mistake', 'blunder'].includes(item.classification)) {
       const bDestC = moveDestCol(item.bestMove);
       const bVisualC = (item.bestMove.castle && bDestC === item.bestMove.from.c)
@@ -925,7 +1099,6 @@ export class GameAnalyzer {
       drawArrow(item.bestMove.from.r, item.bestMove.from.c, item.bestMove.to.r, bVisualC, '#22c55e', 0.86);
     }
 
-    // Insignia circular estilo Chess.com en la esquina superior derecha de la casilla destino
     const pDest = toCenter(item.played.to.r, moveDestCol(item.played));
     const bx = pDest.vc * 100 + 82;
     const by = pDest.vr * 100 + 18;
