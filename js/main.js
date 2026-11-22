@@ -6,6 +6,8 @@ import { ThemeManager, THEMES } from './themes.js';
 import { FischerClock } from './clock.js';
 import { GameAnalyzer, CLASS_META } from './analyzer.js';
 import { MultiplayerManager } from './multiplayer.js';
+import { AppStore } from './store.js';
+import { AppShell } from './appShell.js';
 
 const UNICODE_CAPTURED = {
   w: { P: '♙', N: '♘', B: '♗', R: '♖', Q: '♕', K: '♔' },
@@ -14,7 +16,11 @@ const UNICODE_CAPTURED = {
 
 class ChessApp {
   constructor() {
-    this.engine = new Chess960Engine(Math.floor(Math.random() * 960));
+    this.store = new AppStore();
+    this.variant = this.store.data.settings.defaultVariant || 'classic';
+    const initialPos = this.variant === 'classic' ? 518 : Math.floor(Math.random() * 960);
+
+    this.engine = new Chess960Engine(initialPos);
     this.sound = new SoundFX();
     this.ai = new ChessAI();
 
@@ -50,6 +56,7 @@ class ChessApp {
       onThemeChange: (theme) => {
         this.fx.setPalette(theme.fxPalette);
         this.setPieceRenderer(theme.renderPiece);
+        this.store.recordThemeUsed(theme.id);
       }
     });
 
@@ -62,13 +69,20 @@ class ChessApp {
     });
     this.clock.applyModeDefault(this.mode);
 
-    // Fase 4: Analizador Post-Partida con Voz Fluida y Animaciones
+    // Fase 4: Analizador Post-Partida con Voz y Animaciones
     this.analyzer = new GameAnalyzer({
       postgameSlotEl: this.dom.postgameSlot,
       modalActionsEl: this.dom.gameoverActions,
       deferVoice: true,
       onAnalysisReady: (results) => {
         this.analysisResults = results;
+        const summary = this.analyzer.summary;
+        if (summary) {
+          const myAcc = this.mode === 'online' && this.onlineColor === 'b'
+            ? summary.blackAcc
+            : summary.whiteAcc;
+          this.store.recordAccuracy(myAcc);
+        }
         this._renderStatusAndHistory();
       },
       onReviewStep: (frame) => this._handleReviewStep(frame),
@@ -89,7 +103,7 @@ class ChessApp {
       modeSelectEl: this.dom.modeSelect,
       sidePanelEl: this.dom.sidePanel,
       getHostConfig: () => ({
-        positionId: this.engine.positionId,
+        positionId: this.variant === 'classic' ? 518 : this.engine.positionId,
         clockPresetId: this.clock.preset.id
       }),
       onMatchStart: ({ positionId, myColor, clockPresetId }) => {
@@ -104,15 +118,31 @@ class ChessApp {
       }
     });
 
-    this._bindEvents();
-    this._syncInputs();
+    // Fase 6: Pantalla de Inicio, Menú App y Selector Clásico / 960
+    this.shell = new AppShell({
+      store: this.store,
+      getCurrentThemeId: () => this.themes.currentId,
+      getCurrentVariant: () => this.variant,
+      onThemeSelect: (id) => {
+        this.themes.apply(id);
+        const sel = document.getElementById('theme-select');
+        if (sel) sel.value = id;
+      },
+      onVariantChange: (v) => this.setVariant(v, { startFresh: true }),
+      onLaunchGame: ({ variant, mode }) => {
+        this._setModeProgrammatically(mode);
+        this.setVariant(variant, { startFresh: true });
+      }
+    });
 
+    this._bindEvents();
+    this.setVariant(this.variant, { startFresh: false });
+
+    // Si llega desde un enlace ?sala=XXXXXX, saltar Inicio y conectar directo
     const inviteRoom = this.mp.getPendingRoomFromUrl();
     if (inviteRoom) {
-      this.mode = 'online';
-      this.dom.modeSelect.value = 'online';
-      this.clock.applyModeDefault('online');
-      this.mp.setVisible(true);
+      this._setModeProgrammatically('online');
+      this.shell.navigate('play');
       this.mp.joinRoom(inviteRoom);
     }
 
@@ -129,6 +159,9 @@ class ChessApp {
       postgameSlot: $('postgame-slot'),
       gameoverActions: $('gameover-actions'),
       sidePanel: document.querySelector('.side-panel'),
+      posLoader: document.querySelector('.pos-loader'),
+      brandTitle: document.querySelector('.brand h1'),
+      brandSub: document.querySelector('.brand .subtitle'),
       btnRandom960: $('btn-random-960'),
       posInput: $('pos-input'),
       btnLoadPos: $('btn-load-pos'),
@@ -179,28 +212,58 @@ class ChessApp {
     this.dom.btnResign = btn;
   }
 
+  _setModeProgrammatically(newMode) {
+    const prevMode = this.mode;
+    this.mode = newMode;
+    this.dom.modeSelect.value = newMode;
+    if (prevMode === 'online' && newMode !== 'online') {
+      this.mp.disconnect(true);
+      this.onlineColor = null;
+    }
+    this.mp.setVisible(newMode === 'online');
+    this.clock.applyModeDefault(newMode);
+    this._updatePlayerLabels();
+  }
+
+  setVariant(variant, { startFresh = true } = {}) {
+    this.variant = variant === 'fischer960' ? 'fischer960' : 'classic';
+    const isClassic = this.variant === 'classic';
+
+    if (this.shell) this.shell.syncVariantUI(this.variant);
+    if (this.dom.posLoader) this.dom.posLoader.style.display = isClassic ? 'none' : 'flex';
+    if (this.dom.btnRandom960) {
+      this.dom.btnRandom960.textContent = isClassic ? '♟ Nueva Partida' : '🎲 Nueva 960';
+    }
+    if (this.dom.brandTitle) {
+      this.dom.brandTitle.innerHTML = isClassic
+        ? 'Ajedrez Táctico <span class="badge-tag">CLÁSICO</span>'
+        : 'Ajedrez Táctico <span class="badge-tag">FISCHER 960</span>';
+    }
+    if (this.dom.brandSub) {
+      this.dom.brandSub.textContent = isClassic
+        ? 'Modalidad Clásica Oficial · Combate Animado'
+        : 'Generador Scharnagl #0–#959 · Combate Animado';
+    }
+
+    if (startFresh) {
+      this._requestNewPosition(isClassic ? 518 : Math.floor(Math.random() * 960));
+    } else {
+      this._syncInputs();
+    }
+  }
+
   _bindEvents() {
     this.dom.modeSelect.addEventListener('change', (e) => {
-      const prevMode = this.mode;
-      this.mode = e.target.value;
-
-      if (prevMode === 'online' && this.mode !== 'online') {
-        this.mp.disconnect(true);
-        this.onlineColor = null;
-      }
-
-      this.mp.setVisible(this.mode === 'online');
-      this.clock.applyModeDefault(this.mode);
-      this._updatePlayerLabels();
+      this._setModeProgrammatically(e.target.value);
       this.render();
-
       if (this._isAiTurn() && !this.isAnimating && !this.reviewFrame) {
         this._scheduleAiMove();
       }
     });
 
     this.dom.btnRandom960.addEventListener('click', () => {
-      this._requestNewPosition(Math.floor(Math.random() * 960));
+      const nextPos = this.variant === 'classic' ? 518 : Math.floor(Math.random() * 960);
+      this._requestNewPosition(nextPos);
     });
 
     this.dom.btnLoadPos.addEventListener('click', () => {
@@ -247,7 +310,8 @@ class ChessApp {
 
     this.dom.btnRematch.addEventListener('click', () => {
       this.dom.gameoverModal.classList.add('hidden');
-      this._requestNewPosition(Math.floor(Math.random() * 960));
+      const nextPos = this.variant === 'classic' ? 518 : Math.floor(Math.random() * 960);
+      this._requestNewPosition(nextPos);
     });
 
     this.dom.btnCloseGameover.addEventListener('click', () => {
@@ -255,10 +319,6 @@ class ChessApp {
     });
   }
 
-  /**
-   * Reproduce cada jugada de la revisión post-partida con sus animaciones,
-   * explosión de jaque mate si aplica, y activa la voz al asentarse la jugada.
-   */
   _handleReviewStep(frame) {
     const token = ++this._reviewAnimToken;
     this.fx.cancelActive();
@@ -372,16 +432,18 @@ class ChessApp {
   }
 
   _requestNewPosition(positionId) {
+    const finalPos = this.variant === 'classic' ? 518 : positionId;
     if (this.mode === 'online' && this.mp.isConnected()) {
-      this.mp.requestRematch(positionId, this.clock.preset.id);
+      this.mp.requestRematch(finalPos, this.clock.preset.id);
       return;
     }
-    this.startNewGame(positionId);
+    this.startNewGame(finalPos);
   }
 
   _startOnlineMatch(positionId, myColor, clockPresetId) {
     this.onlineColor = myColor;
     this.flipped = myColor === 'b';
+    this.setVariant(positionId === 518 ? 'classic' : 'fischer960', { startFresh: false });
     this.clock.setPreset(clockPresetId || '5+3');
     this.clock.syncOrientation(this.flipped);
     this.startNewGame(positionId);
@@ -472,7 +534,9 @@ class ChessApp {
 
   _syncInputs() {
     this.dom.posInput.value = this.engine.positionId;
-    this.dom.posBadge.textContent = `Posición #${this.engine.positionId}`;
+    this.dom.posBadge.textContent = this.variant === 'classic'
+      ? '♟ Ajedrez Clásico'
+      : `🎲 Fischer #${this.engine.positionId}`;
     this._updatePlayerLabels();
   }
 
@@ -484,7 +548,8 @@ class ChessApp {
 
   _updatePlayerLabels() {
     const topIsBlack = !this.flipped;
-    let whiteLabel = 'Blancas (Tú)';
+    const myName = this.store?.data?.profile?.name || 'Tú';
+    let whiteLabel = `Blancas (${myName})`;
     let blackLabel = this.mode === 'ai-easy' ? 'Negras (IA Fácil)' : 'Negras (IA Normal)';
 
     if (this.mode === 'pvp') {
@@ -492,8 +557,8 @@ class ChessApp {
       blackLabel = 'Negras (J2)';
     } else if (this.mode === 'online') {
       if (this.mp.isConnected() && this.onlineColor) {
-        whiteLabel = this.onlineColor === 'w' ? 'Blancas (Tú)' : 'Blancas (Rival Online)';
-        blackLabel = this.onlineColor === 'b' ? 'Negras (Tú)' : 'Negras (Rival Online)';
+        whiteLabel = this.onlineColor === 'w' ? `Blancas (${myName})` : 'Blancas (Rival Online)';
+        blackLabel = this.onlineColor === 'b' ? `Negras (${myName})` : 'Negras (Rival Online)';
       } else {
         whiteLabel = 'Blancas (Esperando...)';
         blackLabel = 'Negras (Esperando...)';
@@ -583,6 +648,10 @@ class ChessApp {
     const enemyColor = moverColor === 'w' ? 'b' : 'w';
     const record = this.engine.makeMove(move);
 
+    if (record.castle && !fromRemote) {
+      this.store.recordCastle();
+    }
+
     this.selected = null;
     this.legalForSelected = [];
     this.isAnimating = true;
@@ -601,7 +670,6 @@ class ChessApp {
     const finishMove = () => {
       this.hiddenSquares.clear();
 
-      // Si es Jaque Mate: detonar la caída y explosión del Rey vencido antes de abrir el modal
       if (this.engine.status === 'checkmate') {
         this.clock.stop();
         const loserColor = this.engine.winner === 'w' ? 'b' : 'w';
@@ -746,6 +814,19 @@ class ChessApp {
     this.render();
   }
 
+  _recordOutcomeInStore(winner, byCheckmate = false) {
+    const myColor = this.mode === 'online' ? this.onlineColor : 'w';
+    let outcome = 'draw';
+    if (winner) {
+      outcome = winner === myColor ? 'win' : 'loss';
+    }
+    this.store.recordGame({
+      variant: this.variant,
+      outcome,
+      byCheckmate
+    });
+  }
+
   handleResign() {
     if (this.aiBusy || this.isAnimating || this.engine.status !== 'playing' || this.engine.history.length === 0) {
       return;
@@ -768,6 +849,7 @@ class ChessApp {
     this.clock.stop();
     this.selected = null;
     this.legalForSelected = [];
+    this._recordOutcomeInStore(winner, false);
     this.render();
 
     const winText = winner === 'w' ? 'Blancas' : 'Negras';
@@ -793,6 +875,7 @@ class ChessApp {
     this.selected = null;
     this.legalForSelected = [];
     this.clock.stop();
+    this._recordOutcomeInStore(winner, false);
     this.render();
 
     const winText = winner === 'w' ? 'Blancas' : 'Negras';
@@ -801,7 +884,7 @@ class ChessApp {
     this.sound.playGameOver(iWon);
 
     this.dom.gameoverTitle.textContent = `⏱ ¡Tiempo Agotado! Ganan ${winText}`;
-    this.dom.gameoverSubtitle.textContent = `A las ${loseText} se les acabó el reloj Fischer en la posición #${this.engine.positionId}.`;
+    this.dom.gameoverSubtitle.textContent = `A las ${loseText} se les acabó el reloj Fischer.`;
     this.analyzer.onGameOver(this.engine);
     this.dom.gameoverModal.classList.remove('hidden');
   }
@@ -814,11 +897,17 @@ class ChessApp {
       const winText = this.engine.winner === 'w' ? 'Blancas' : 'Negras';
       const iWon = this.mode === 'online' ? this.engine.winner === this.onlineColor : this.engine.winner === 'w';
       title = `👑 ¡Jaque Mate! Ganan ${winText}`;
-      subtitle = `El Rey cayó en la posición Fischer #${this.engine.positionId}.`;
+      subtitle = this.variant === 'classic'
+        ? 'El Rey cayó en Ajedrez Clásico.'
+        : `El Rey cayó en la posición Fischer #${this.engine.positionId}.`;
+      this._recordOutcomeInStore(this.engine.winner, true);
       if (!skipVictoryJingle) this.sound.playGameOver(iWon);
-    } else if (this.engine.status === 'stalemate') {
-      title = 'Tablas por Ahogado';
-      subtitle = 'El bando al turno no tiene jugadas legales y no está en jaque.';
+    } else {
+      this._recordOutcomeInStore(null, false);
+      if (this.engine.status === 'stalemate') {
+        title = 'Tablas por Ahogado';
+        subtitle = 'El bando al turno no tiene jugadas legales y no está en jaque.';
+      }
     }
 
     this.dom.gameoverTitle.textContent = title;
@@ -835,7 +924,8 @@ class ChessApp {
       const b = this.engine.history[i + 1]?.san || '';
       lines.push(`${num}. ${w}${b ? ' ' + b : ''}`);
     }
-    const text = `[Chess960 #${this.engine.positionId}]\n${lines.join(' ')}`;
+    const header = this.variant === 'classic' ? '[Ajedrez Clásico]' : `[Chess960 #${this.engine.positionId}]`;
+    const text = `${header}\n${lines.join(' ')}`;
     navigator.clipboard?.writeText(text).then(() => {
       this.dom.btnCopyPgn.textContent = '✓ Copiado';
       setTimeout(() => (this.dom.btnCopyPgn.textContent = '📋 Copiar'), 1400);
@@ -1036,8 +1126,9 @@ class ChessApp {
         } else if (this.engine.isInCheck(this.engine.turn)) {
           this.dom.statusText.textContent = `¡Jaque a las ${turnName}! Debes proteger al Rey.`;
         } else {
-          this.dom.statusText.textContent =
-            'Selecciona una pieza. Para enroque 960, toca el Rey y luego su Torre iluminada en dorado.';
+          this.dom.statusText.textContent = this.variant === 'classic'
+            ? 'Ajedrez Clásico. Selecciona una pieza para comenzar.'
+            : 'Fischer 960. Para enrocar, toca el Rey y luego su Torre iluminada en dorado.';
         }
       } else if (this.engine.status === 'checkmate') {
         this.dom.statusText.textContent = `Jaque mate. Victoria de ${this.engine.winner === 'w' ? 'Blancas' : 'Negras'}.`;
