@@ -57,16 +57,20 @@ function squareToSpeech(sq) {
   return `${f} ${sq[1]}`;
 }
 
-function sanToSpanishSpeech(san) {
+/**
+ * Convierte notación algebraica a formato conciso de comentarista en español:
+ * De4 -> "Dama e 4" | Cxf6+ -> "Caballo por efe 6, jaque" | O-O -> "enroque corto"
+ */
+function sanToSpanishSpeech(san, { includeMateSuffix = true } = {}) {
   if (!san) return '';
   let text = san.trim();
   let suffix = '';
 
   if (text.endsWith('#')) {
-    suffix = ', jaque mate';
+    if (includeMateSuffix) suffix = ', jaque mate';
     text = text.slice(0, -1);
   } else if (text.endsWith('+')) {
-    suffix = ', con jaque';
+    suffix = ', jaque';
     text = text.slice(0, -1);
   }
 
@@ -76,7 +80,7 @@ function sanToSpanishSpeech(san) {
   let promoSpeech = '';
   const promoMatch = text.match(/=([CATD])$/);
   if (promoMatch) {
-    promoSpeech = ` coronando a ${SAN_PIECE_NAME[promoMatch[1]] || promoMatch[1]}`;
+    promoSpeech = ` corona ${SAN_PIECE_NAME[promoMatch[1]] || promoMatch[1]}`;
     text = text.replace(/=[CATD]$/, '');
   }
 
@@ -90,19 +94,19 @@ function sanToSpanishSpeech(san) {
         ? ` de ${squareToSpeech(disamb)}`
         : ` de ${FILE_PHONETIC[disamb] || disamb}`;
     }
-    const action = cap ? ' captura en ' : ' a ';
-    return `${pName}${fromPart}${action}${squareToSpeech(dest)}${promoSpeech}${suffix}`;
+    const connector = cap ? ' por ' : ' ';
+    return `${pName}${fromPart}${connector}${squareToSpeech(dest)}${promoSpeech}${suffix}`;
   }
 
   const pawnCap = text.match(/^([a-h])x([a-h][1-8])$/);
   if (pawnCap) {
     const fileSpoken = FILE_PHONETIC[pawnCap[1]] || pawnCap[1];
-    return `peón de ${fileSpoken} captura en ${squareToSpeech(pawnCap[2])}${promoSpeech}${suffix}`;
+    return `${fileSpoken} por ${squareToSpeech(pawnCap[2])}${promoSpeech}${suffix}`;
   }
 
   const pawnPush = text.match(/^([a-h][1-8])$/);
   if (pawnPush) {
-    return `peón a ${squareToSpeech(pawnPush[1])}${promoSpeech}${suffix}`;
+    return `${squareToSpeech(pawnPush[1])}${promoSpeech}${suffix}`;
   }
 
   return `${text}${promoSpeech}${suffix}`;
@@ -220,7 +224,6 @@ class VoiceCoach {
 
     if (!this.voice) this._refreshVoices();
 
-    // Pequeña pausa tras cancel() evita cortes en Chrome y Edge
     this._speakTimer = setTimeout(() => {
       this._speakTimer = null;
       const utter = new SpeechSynthesisUtterance(text);
@@ -228,7 +231,7 @@ class VoiceCoach {
       if (this.voice) utter.voice = this.voice;
 
       const isNeural = /natural|online|google|neural/i.test(this.voice?.name || '');
-      utter.rate = isNeural ? 1.0 : 1.02;
+      utter.rate = isNeural ? 1.04 : 1.05;
       utter.pitch = 1.0;
 
       try {
@@ -784,7 +787,6 @@ export class GameAnalyzer {
       bestMove,
       bestSan,
       bestRecord,
-      cpLoss,
       missedMate,
       allowedMate,
       isExactBest,
@@ -812,6 +814,9 @@ export class GameAnalyzer {
     return Math.abs(v1 - v2);
   }
 
+  /**
+   * Análisis directo y sin redundancias: no repite la clasificación ni la jugada realizada.
+   */
   _buildCoachComment({
     classification,
     beforeEngine,
@@ -820,7 +825,6 @@ export class GameAnalyzer {
     bestMove,
     bestSan,
     bestRecord,
-    cpLoss,
     missedMate,
     allowedMate,
     isExactBest,
@@ -832,39 +836,39 @@ export class GameAnalyzer {
     const pieceName = PIECE_GEN[played.piece] || 'tu pieza';
 
     const whyBest = () => {
-      if (bestRecord.san.endsWith('#')) return 'da jaque mate inmediato y cierra la partida';
-      if (bestMove.castle) return 'resguarda al Rey de forma segura y conecta las Torres';
-      if (bestMove.promo) return `corona el Peón a ${PIECE_ES[bestMove.promo]} ganando ventaja decisiva`;
+      if (bestRecord.san.endsWith('#')) return 'da jaque mate inmediato';
+      if (bestMove.castle) return 'resguarda al Rey y conecta las Torres';
+      if (bestMove.promo) return `corona a ${PIECE_ES[bestMove.promo]} con ventaja decisiva`;
       if (bestRecord.captured) {
         const capVal = PIECE_VALUES[bestRecord.captured] || 100;
         const atkVal = PIECE_VALUES[bestMove.piece] || 100;
-        if (capVal > atkVal) return `captura un ${PIECE_ES[bestRecord.captured]} enemigo ganando material limpio`;
-        return `elimina el ${PIECE_ES[bestRecord.captured]} en ${sqName(bestMove.to.r, bestMove.to.c)} y mejora tu iniciativa`;
+        if (capVal > atkVal) return `gana un ${PIECE_ES[bestRecord.captured]} limpio`;
+        return `elimina el ${PIECE_ES[bestRecord.captured]} rival y mejora la iniciativa`;
       }
-      if (bestRecord.inCheck) return 'da jaque y obliga al rival a defenderse, manteniendo la iniciativa';
+      if (bestRecord.inCheck) return 'da jaque y mantiene la iniciativa';
       const movedFromAttacked = beforeEngine.isSquareAttacked(bestMove.from.r, bestMove.from.c, enemy);
       if (movedFromAttacked && bestMove.piece !== 'P') {
-        return `ponía a salvo tu ${PIECE_ES[bestMove.piece]} que estaba bajo ataque`;
+        return `pone a salvo tu ${PIECE_ES[bestMove.piece]}`;
       }
       if (isCenterSquare(bestMove.to.r, moveDestCol(bestMove))) {
-        return `toma el control directo del centro en ${sqName(bestMove.to.r, moveDestCol(bestMove))}`;
+        return 'toma el control directo del centro';
       }
       if (bestMove.piece === 'N' || bestMove.piece === 'B') {
-        return `activa tu ${PIECE_ES[bestMove.piece]} hacia una casilla mucho más agresiva`;
+        return `activa tu ${PIECE_ES[bestMove.piece]} hacia una casilla más agresiva`;
       }
-      return 'mantiene mejor coordinación de piezas y evita debilidades tácticas';
+      return 'mantiene mejor coordinación sin dejar debilidades';
     };
 
     if (played.san.endsWith('#')) {
-      return `¡Remate impecable! ${played.san} sella el jaque mate sin escapatoria posible.`;
+      return 'Remate impecable, sin escapatoria para el Rey.';
     }
 
     if (classification === 'blunder' || classification === 'mistake' || classification === 'inaccuracy') {
       if (allowedMate) {
-        return `Error crítico: ${played.san} deja a tu Rey expuesto a jaque mate forzado. Yo habría jugado ${bestSan}, porque ${whyBest()}.`;
+        return `Deja a tu Rey expuesto a jaque mate forzado. Mejor era ${bestSan}, porque ${whyBest()}.`;
       }
       if (missedMate) {
-        return `Dejaste escapar una victoria inmediata. En lugar de ${played.san}, yo habría jugado ${bestSan}, que ${whyBest()}.`;
+        return `Dejas escapar una victoria inmediata. Mejor era ${bestSan}, porque ${whyBest()}.`;
       }
 
       const destR = played.to.r;
@@ -875,57 +879,57 @@ export class GameAnalyzer {
         !afterPlayed.isSquareAttacked(destR, destC, color);
 
       if (hungMovedPiece && played.piece !== 'K') {
-        return `Con ${played.san} dejaste ${pieceName} sin defensa en ${destSq}, donde el rival puede capturarlo gratis. Yo habría jugado ${bestSan}, ya que ${whyBest()}.`;
+        return `Dejas ${pieceName} sin defensa en ${destSq}. Mejor era ${bestSan}, porque ${whyBest()}.`;
       }
 
       if (bestRecord.captured && !played.captured) {
-        return `Pasaste por alto una captura táctica importante. En vez de ${played.san}, yo jugaría ${bestSan}, porque ${whyBest()}.`;
+        return `Pasas por alto una captura táctica. Mejor era ${bestSan}, porque ${whyBest()}.`;
       }
 
       if (classification === 'inaccuracy') {
-        return `${played.san} es jugable, pero cede algo de ventaja, alrededor de ${(cpLoss / 100).toFixed(1)} peones. Yo preferiría ${bestSan}, porque ${whyBest()}.`;
+        return `Cede algo de ventaja. Mejor era ${bestSan}, porque ${whyBest()}.`;
       }
 
-      return `${played.san} debilita seriamente tu posición y permite un contragolpe rival. Yo habría hecho ${bestSan}, ya que ${whyBest()}.`;
+      return `Debilita la posición y permite contrajuego. Mejor era ${bestSan}, porque ${whyBest()}.`;
     }
 
     if (classification === 'brilliant') {
       if (looksLikeSacrifice) {
-        return `¡Golpe táctico brillante! Con ${played.san} sacrificas o expones ${pieceName} en ${destSq} con cálculo exacto, obligando al rival a quedar en desventaja.`;
+        return `Sacrificas ${pieceName} con cálculo exacto y dejas al rival sin respuesta.`;
       }
-      return `¡Jugada brillante! ${played.san} era la única línea ganadora en una posición muy aguda y mantiene el dominio total.`;
+      return 'Única línea ganadora en una posición muy aguda.';
     }
 
     if (played.castle) {
-      return `Muy buena decisión con ${played.san}: proteges al Rey y activas la Torre rápidamente, clave en Ajedrez 960.`;
+      return 'Resguardas al Rey y activas la Torre, clave en Ajedrez 960.';
     }
     if (played.promo) {
-      return `Gran avance: coronar con ${played.san} convierte tu ventaja en material decisivo.`;
+      return 'Coronas y conviertes tu ventaja en material decisivo.';
     }
     if (played.captured) {
-      return `${isExactBest ? 'La mejor continuación' : 'Sólida captura'}: ${played.san} elimina un ${PIECE_ES[played.captured]} enemigo${played.inCheck ? ' con jaque' : ''} y mantiene la presión.`;
+      return `Eliminas un ${PIECE_ES[played.captured]} enemigo${played.inCheck ? ' con jaque' : ''} y mantienes la presión.`;
     }
     if (played.inCheck) {
-      return `Buen golpe táctico: ${played.san} da jaque, limita las opciones del rival y te permite dictar el ritmo.`;
+      return 'Obligas al rival a defenderse y conservas la iniciativa.';
     }
     if (isExactBest) {
-      return `Precisión máxima: ${played.san} es exactamente la jugada que elegiría el motor porque ${whyBest()}.`;
+      return `Justo lo que pedía la posición, porque ${whyBest()}.`;
     }
     if (classification === 'excellent') {
-      return `Excelente elección: ${played.san} mantiene la iniciativa y la solidez de tu estructura. Como alternativa muy pareja, también funcionaba ${bestSan}.`;
+      return `Mantiene la iniciativa y una estructura sólida.${!isExactBest ? ` También servía ${bestSan}.` : ''}`;
     }
-    return `Jugada correcta y consistente: ${played.san} sostiene bien la posición. Otra opción ligeramente más activa era ${bestSan}, que ${whyBest()}.`;
+    return `Sostiene bien la posición.${!isExactBest ? ` Otra opción activa era ${bestSan}.` : ''}`;
   }
 
   /**
-   * Construye un guión natural y conversacional para el entrenador por voz.
+   * Guión conciso y natural: "[Clasificación], [Jugada]. [Análisis/recomendación]"
    */
   speakCurrentPly(force = false) {
     if (!this.inReview) return;
     if (this.currentPly <= 0) {
       if (force && this.summary) {
         this.voice.speak(
-          `Posición inicial número ${this.positionId}. Las blancas lograron un ${this.summary.whiteAcc} por ciento de precisión, y las negras un ${this.summary.blackAcc} por ciento.`,
+          `Posición ${this.positionId}. Precisión: Blancas ${this.summary.whiteAcc} por ciento, Negras ${this.summary.blackAcc} por ciento.`,
           true
         );
       } else {
@@ -937,25 +941,12 @@ export class GameAnalyzer {
     const item = this.results[this.currentPly - 1];
     if (!item) return;
 
-    const side = item.played.color === 'w' ? 'Las blancas juegan' : 'Las negras responden con';
-    const spokenMove = sanToSpanishSpeech(item.played.san);
+    const isMate = Boolean(item.played.san && item.played.san.endsWith('#'));
+    const label = isMate ? 'Jaque mate' : CLASS_META[item.classification].label;
+    const spokenMove = sanToSpanishSpeech(item.played.san, { includeMateSuffix: !isMate });
     const spokenComment = humanizeTextForSpeech(item.comment);
 
-    const intros = {
-      brilliant:  `${side} ${spokenMove}. ¡Qué jugada tan brillante!`,
-      best:       `${side} ${spokenMove}. La mejor jugada de la posición.`,
-      excellent:  `${side} ${spokenMove}. Muy buena jugada.`,
-      good:       `${side} ${spokenMove}. Jugada sólida.`,
-      inaccuracy: `${side} ${spokenMove}. Aquí hay una ligera imprecisión.`,
-      mistake:    `${side} ${spokenMove}. Cuidado, esto es un error.`,
-      blunder:    `${side} ${spokenMove}. Atención, error grave.`
-    };
-
-    const intro = item.played.san.endsWith('#')
-      ? `${side} ${spokenMove}.`
-      : (intros[item.classification] || `${side} ${spokenMove}.`);
-
-    this.voice.speak(`${intro} ${spokenComment}`, force);
+    this.voice.speak(`${label}, ${spokenMove}. ${spokenComment}`, force);
   }
 
   _renderProgress(done, total) {
