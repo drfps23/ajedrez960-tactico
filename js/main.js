@@ -28,10 +28,12 @@ class ChessApp {
     this.aiBusy = false;
     this.isAnimating = false;
     this.hiddenSquares = new Set();
+    this.defeatedKingSq = null;
     this.pendingPromo = null;
 
     this.reviewFrame = null;
     this.analysisResults = null;
+    this._reviewAnimToken = 0;
 
     this.pieceRenderer = THEMES.neon.renderPiece;
 
@@ -42,7 +44,7 @@ class ChessApp {
     this.dom.btnThreatLines.classList.remove('active');
     this.dom.btnThreatLines.textContent = '🎯 Mira al Seleccionar';
 
-    // Fase 2: Gestor de Temas
+    // Fase 2: Temas y piezas
     this.themes = new ThemeManager({
       slotEl: this.dom.themeSlot,
       onThemeChange: (theme) => {
@@ -51,7 +53,7 @@ class ChessApp {
       }
     });
 
-    // Fase 3: Reloj con Incremento Fischer
+    // Fase 3: Reloj Fischer
     this.clock = new FischerClock({
       topSlotEl: this.dom.clockTopSlot,
       bottomSlotEl: this.dom.clockBottomSlot,
@@ -60,27 +62,29 @@ class ChessApp {
     });
     this.clock.applyModeDefault(this.mode);
 
-    // Fase 4: Analizador Post-Partida con Voz
+    // Fase 4: Analizador Post-Partida con Voz Fluida y Animaciones
     this.analyzer = new GameAnalyzer({
       postgameSlotEl: this.dom.postgameSlot,
       modalActionsEl: this.dom.gameoverActions,
+      deferVoice: true,
       onAnalysisReady: (results) => {
         this.analysisResults = results;
         this._renderStatusAndHistory();
       },
-      onReviewStep: (frame) => {
-        this.reviewFrame = frame;
-        this.selected = null;
-        this.legalForSelected = [];
-        this.render();
-      },
+      onReviewStep: (frame) => this._handleReviewStep(frame),
       onExitReview: () => {
+        this._reviewAnimToken++;
+        this.fx.cancelActive();
+        this.hiddenSquares.clear();
         this.reviewFrame = null;
+        this.defeatedKingSq = this.engine.status === 'checkmate'
+          ? this.engine.findKing(this.engine.winner === 'w' ? 'b' : 'w')
+          : null;
         this.render();
       }
     });
 
-    // Fase 5: Multijugador Online en Salas Privadas (WebRTC)
+    // Fase 5: Multijugador Online
     this.mp = new MultiplayerManager({
       modeSelectEl: this.dom.modeSelect,
       sidePanelEl: this.dom.sidePanel,
@@ -103,7 +107,6 @@ class ChessApp {
     this._bindEvents();
     this._syncInputs();
 
-    // Si el enlace trae ?sala=XXXXXX, abrir directamente en modo Online y conectar
     const inviteRoom = this.mp.getPendingRoomFromUrl();
     if (inviteRoom) {
       this.mode = 'online';
@@ -252,6 +255,122 @@ class ChessApp {
     });
   }
 
+  /**
+   * Reproduce cada jugada de la revisión post-partida con sus animaciones,
+   * explosión de jaque mate si aplica, y activa la voz al asentarse la jugada.
+   */
+  _handleReviewStep(frame) {
+    const token = ++this._reviewAnimToken;
+    this.fx.cancelActive();
+    this.hiddenSquares.clear();
+    this.selected = null;
+    this.legalForSelected = [];
+    this.defeatedKingSq = null;
+    this.reviewFrame = frame;
+
+    if (frame.ply === 0 || !frame.lastMove) {
+      this.render();
+      frame.stopVoice?.();
+      return;
+    }
+
+    const record = frame.lastMove;
+    const moverColor = record.color;
+    const enemyColor = moverColor === 'w' ? 'b' : 'w';
+    const isMate = Boolean(record.san && record.san.endsWith('#'));
+
+    const finishReviewAnim = () => {
+      if (token !== this._reviewAnimToken) return;
+
+      if (isMate) {
+        const kSq = frame.engine.findKing(enemyColor);
+        if (kSq) {
+          this.hiddenSquares.clear();
+          this.hiddenSquares.add(`${kSq.r},${kSq.c}`);
+          this.render({ skipReviewOverlay: true });
+          this.sound.playCheckmateDefeat();
+
+          this.fx.playCheckmateSequence({
+            kingHtml: this.pieceRenderer('K', enemyColor),
+            kingSq: kSq,
+            flipped: this.flipped,
+            winnerColor: moverColor,
+            onComplete: () => {
+              if (token !== this._reviewAnimToken) return;
+              this.hiddenSquares.clear();
+              this.defeatedKingSq = kSq;
+              this.render();
+              frame.speak?.();
+            }
+          });
+          return;
+        }
+      }
+
+      this.hiddenSquares.clear();
+      if (record.inCheck) this.sound.playCheck();
+      this.render();
+      frame.speak?.();
+    };
+
+    if (record.castle) {
+      const row = record.from.r;
+      this.hiddenSquares.add(`${row},${record.kingToCol}`);
+      this.hiddenSquares.add(`${row},${record.rookToCol}`);
+      this.render({ skipReviewOverlay: true });
+      this.sound.playCastle();
+
+      this.fx.animateCastle({
+        kingHtml: this.pieceRenderer('K', moverColor),
+        rookHtml: this.pieceRenderer('R', moverColor),
+        row,
+        kingFrom: record.from.c,
+        kingTo: record.kingToCol,
+        rookFrom: record.rookFromCol,
+        rookTo: record.rookToCol,
+        flipped: this.flipped,
+        onComplete: finishReviewAnim
+      });
+      return;
+    }
+
+    if (record.captured) {
+      const victimSq = record.ep
+        ? { r: record.from.r, c: record.to.c }
+        : { r: record.to.r, c: record.to.c };
+
+      this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
+      this.render({ skipReviewOverlay: true });
+
+      this.fx.playCombatSequence({
+        pieceType: record.piece,
+        attackerHtml: this.pieceRenderer(record.promo || record.piece, moverColor),
+        victimHtml: this.pieceRenderer(record.captured, enemyColor),
+        from: record.from,
+        to: record.to,
+        victimSq,
+        flipped: this.flipped,
+        onCharge: () => this.sound.playCharge(record.piece),
+        onImpact: () => this.sound.playAttack(record.piece),
+        onComplete: finishReviewAnim
+      });
+      return;
+    }
+
+    this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
+    this.render({ skipReviewOverlay: true });
+    this.sound.playMove(record.piece);
+
+    this.fx.animateRegularMove({
+      pieceHtml: this.pieceRenderer(record.promo || record.piece, moverColor),
+      pieceType: record.piece,
+      from: record.from,
+      to: record.to,
+      flipped: this.flipped,
+      onComplete: finishReviewAnim
+    });
+  }
+
   _requestNewPosition(positionId) {
     if (this.mode === 'online' && this.mp.isConnected()) {
       this.mp.requestRematch(positionId, this.clock.preset.id);
@@ -333,9 +452,12 @@ class ChessApp {
   }
 
   startNewGame(positionId) {
+    this._reviewAnimToken++;
+    this.fx.cancelActive();
     this.aiBusy = false;
     this.isAnimating = false;
     this.hiddenSquares.clear();
+    this.defeatedKingSq = null;
     this.selected = null;
     this.legalForSelected = [];
     this.reviewFrame = null;
@@ -468,7 +590,6 @@ class ChessApp {
 
     this.clock.pause();
 
-    // Enviar la jugada al rival en tiempo real si la hicimos nosotros
     if (this.mode === 'online' && !fromRemote && this.mp.isConnected()) {
       const projected = { ...this.clock.remaining };
       if (this.clock.isEnabled() && this.clock.started) {
@@ -479,6 +600,35 @@ class ChessApp {
 
     const finishMove = () => {
       this.hiddenSquares.clear();
+
+      // Si es Jaque Mate: detonar la caída y explosión del Rey vencido antes de abrir el modal
+      if (this.engine.status === 'checkmate') {
+        this.clock.stop();
+        const loserColor = this.engine.winner === 'w' ? 'b' : 'w';
+        const kSq = this.engine.findKing(loserColor);
+
+        if (kSq) {
+          this.hiddenSquares.add(`${kSq.r},${kSq.c}`);
+          this.render();
+          this.sound.playCheckmateDefeat();
+
+          this.fx.playCheckmateSequence({
+            kingHtml: this.pieceRenderer('K', loserColor),
+            kingSq: kSq,
+            flipped: this.flipped,
+            winnerColor: this.engine.winner,
+            onComplete: () => {
+              this.hiddenSquares.clear();
+              this.defeatedKingSq = kSq;
+              this.isAnimating = false;
+              this.render();
+              this._handleGameOver({ skipVictoryJingle: true });
+            }
+          });
+          return;
+        }
+      }
+
       this.isAnimating = false;
       this.render();
 
@@ -575,9 +725,12 @@ class ChessApp {
   handleUndo() {
     if (this.mode === 'online') return;
     if (this.aiBusy || this.isAnimating || this.engine.history.length === 0) return;
+    this._reviewAnimToken++;
+    this.fx.cancelActive();
     this.dom.gameoverModal.classList.add('hidden');
     this.reviewFrame = null;
     this.analysisResults = null;
+    this.defeatedKingSq = null;
     this.analyzer.reset();
 
     if (this.mode !== 'pvp' && this.engine.turn === 'w' && this.engine.history.length >= 2) {
@@ -653,16 +806,16 @@ class ChessApp {
     this.dom.gameoverModal.classList.remove('hidden');
   }
 
-  _handleGameOver() {
+  _handleGameOver({ skipVictoryJingle = false } = {}) {
     let title = 'Tablas';
     let subtitle = 'Empate por regla o material insuficiente.';
 
     if (this.engine.status === 'checkmate') {
       const winText = this.engine.winner === 'w' ? 'Blancas' : 'Negras';
       const iWon = this.mode === 'online' ? this.engine.winner === this.onlineColor : this.engine.winner === 'w';
-      title = `¡Jaque Mate! Ganan ${winText}`;
-      subtitle = `Partida finalizada en la posición Fischer #${this.engine.positionId}.`;
-      this.sound.playGameOver(iWon);
+      title = `👑 ¡Jaque Mate! Ganan ${winText}`;
+      subtitle = `El Rey cayó en la posición Fischer #${this.engine.positionId}.`;
+      if (!skipVictoryJingle) this.sound.playGameOver(iWon);
     } else if (this.engine.status === 'stalemate') {
       title = 'Tablas por Ahogado';
       subtitle = 'El bando al turno no tiene jugadas legales y no está en jaque.';
@@ -689,10 +842,10 @@ class ChessApp {
     });
   }
 
-  render() {
+  render({ skipReviewOverlay = false } = {}) {
     this._updatePlayerLabels();
     this._renderBoard();
-    this._renderTacticalLines();
+    this._renderTacticalLines(skipReviewOverlay);
     this._renderStatusAndHistory();
   }
 
@@ -765,10 +918,18 @@ class ChessApp {
         }
 
         const piece = activeEngine.board[r][c];
-        const isHidden = !this.reviewFrame && this.hiddenSquares.has(`${r},${c}`);
+        const isHidden = this.hiddenSquares.has(`${r},${c}`);
         if (piece && !isHidden) {
           const wrap = document.createElement('div');
           wrap.className = 'piece-wrap';
+          if (
+            piece.type === 'K' &&
+            this.defeatedKingSq &&
+            this.defeatedKingSq.r === r &&
+            this.defeatedKingSq.c === c
+          ) {
+            wrap.classList.add('king-defeated');
+          }
           wrap.innerHTML = this.pieceRenderer(piece.type, piece.color);
           sq.appendChild(wrap);
         }
@@ -779,12 +940,14 @@ class ChessApp {
     }
   }
 
-  _renderTacticalLines() {
+  _renderTacticalLines(skipReviewOverlay = false) {
     const svg = this.dom.tacticalSvg;
     svg.innerHTML = '';
 
     if (this.reviewFrame) {
-      this.analyzer.renderBoardOverlay(svg, this.flipped);
+      if (!skipReviewOverlay) {
+        this.analyzer.renderBoardOverlay(svg, this.flipped);
+      }
       return;
     }
 
@@ -858,7 +1021,7 @@ class ChessApp {
 
     if (this.reviewFrame) {
       this.dom.turnPill.textContent = `Revisión: Jugada ${this.reviewFrame.ply}/${this.engine.history.length}`;
-      this.dom.statusText.textContent = 'Modo Revisión Post-Partida activo. Usa ◀ ▶ o toca cualquier jugada para leer y escuchar el análisis.';
+      this.dom.statusText.textContent = 'Modo Revisión Post-Partida activo. Usa ◀ ▶ o toca cualquier jugada para revivir las animaciones y escuchar el análisis.';
     } else if (this.mode === 'online' && !this.mp.isConnected()) {
       this.dom.turnPill.textContent = 'Online: En espera';
       this.dom.statusText.textContent = 'Crea una sala privada o pega un código en el panel derecho para iniciar la partida en vivo.';
