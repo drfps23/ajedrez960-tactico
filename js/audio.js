@@ -49,7 +49,6 @@ export class SoundFX {
     const t = ctx.currentTime;
 
     if (pieceType === 'N') {
-      // Doble golpe de cascos al saltar
       [0, 0.085].forEach((offset, idx) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -87,7 +86,6 @@ export class SoundFX {
     this.playMove('R');
     setTimeout(() => this.playMove('K'), 110);
 
-    // Acorde metálico breve de enroque
     [392, 587.33].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
@@ -136,7 +134,6 @@ export class SoundFX {
       g.gain.setValueAtTime(0.14, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
     } else {
-      // Peón: silbido de filo
       this._noiseBurst(ctx, t, 0.16, 0.22, 2800, 'highpass');
       return;
     }
@@ -152,7 +149,6 @@ export class SoundFX {
     const t = ctx.currentTime;
 
     if (pieceType === 'P') {
-      // Estocada Relámpago: corte agudo + chispa eléctrica
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'sawtooth';
@@ -165,7 +161,6 @@ export class SoundFX {
       osc.stop(t + 0.22);
       this._noiseBurst(ctx, t, 0.16, 0.3, 3200, 'bandpass');
     } else if (pieceType === 'N') {
-      // Salto Sísmico: sub-bajo telúrico + temblor
       const sub = ctx.createOscillator();
       const g = ctx.createGain();
       sub.type = 'sine';
@@ -178,7 +173,6 @@ export class SoundFX {
       sub.stop(t + 0.5);
       this._noiseBurst(ctx, t, 0.32, 0.35, 360, 'lowpass');
     } else if (pieceType === 'B') {
-      // Rayo Diagonal: láser resonante + cristal roto
       [1560, 1040].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -193,7 +187,6 @@ export class SoundFX {
       });
       this._noiseBurst(ctx, t, 0.2, 0.22, 4200, 'highpass');
     } else if (pieceType === 'R') {
-      // Embestida de Ariete: choque metálico pesado + derrumbe
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'square';
@@ -206,7 +199,6 @@ export class SoundFX {
       osc.stop(t + 0.42);
       this._noiseBurst(ctx, t, 0.36, 0.38, 650, 'lowpass');
     } else if (pieceType === 'Q') {
-      // Nova Real: acorde imperial + explosión supernova
       [880, 659.25, 440].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -231,7 +223,6 @@ export class SoundFX {
       boom.stop(t + 0.55);
       this._noiseBurst(ctx, t, 0.4, 0.34, 1500, 'bandpass');
     } else if (pieceType === 'K') {
-      // Juicio Soberano: campana real + trueno
       [293.66, 440, 587.33].forEach((freq) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -245,6 +236,58 @@ export class SoundFX {
       });
       this._noiseBurst(ctx, t, 0.42, 0.35, 500, 'lowpass');
     }
+  }
+
+  /**
+   * Secuencia sonora de Jaque Mate: tensión + caída del Rey + explosión y estallido de piedra/cristal.
+   */
+  playCheckmateDefeat() {
+    const ctx = this._ensureCtx();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+
+    // 1. Tensión ascendente mientras el Rey se agrieta y cae (0 -> 0.42s)
+    const rise = ctx.createOscillator();
+    const rg = ctx.createGain();
+    rise.type = 'sawtooth';
+    rise.frequency.setValueAtTime(110, t);
+    rise.frequency.exponentialRampToValueAtTime(420, t + 0.42);
+    rg.gain.setValueAtTime(0.04, t);
+    rg.gain.linearRampToValueAtTime(0.24, t + 0.40);
+    rg.gain.exponentialRampToValueAtTime(0.001, t + 0.44);
+    rise.connect(rg).connect(ctx.destination);
+    rise.start(t);
+    rise.stop(t + 0.45);
+
+    // 2. Explosión principal al caer el Rey (t + 0.42s)
+    const boomT = t + 0.42;
+    const sub = ctx.createOscillator();
+    const sg = ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(160, boomT);
+    sub.frequency.exponentialRampToValueAtTime(26, boomT + 0.72);
+    sg.gain.setValueAtTime(0.55, boomT);
+    sg.gain.exponentialRampToValueAtTime(0.001, boomT + 0.75);
+    sub.connect(sg).connect(ctx.destination);
+    sub.start(boomT);
+    sub.stop(boomT + 0.78);
+
+    // Estruendo grave + cristales/escombros agudos
+    this._noiseBurst(ctx, boomT, 0.65, 0.42, 420, 'lowpass');
+    this._noiseBurst(ctx, boomT + 0.03, 0.42, 0.28, 3600, 'highpass');
+
+    // Acorde solemne de coronación/jaque mate
+    [196, 293.66, 392, 587.33].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = i % 2 === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, boomT + 0.08 + i * 0.05);
+      g.gain.setValueAtTime(0.16, boomT + 0.08 + i * 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, boomT + 0.95);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(boomT + 0.08 + i * 0.05);
+      osc.stop(boomT + 0.98);
+    });
   }
 
   playCheck() {
