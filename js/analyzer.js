@@ -2,6 +2,7 @@ import { Chess960Engine, PIECE_VALUES, sqName } from './engine.js';
 import { ChessAI } from './ai.js';
 
 const VOICE_STORAGE_KEY = 'ajedrez960_coach_voice_v1';
+const VOICE_NAME_KEY = 'ajedrez960_coach_voice_name_v1';
 
 const PIECE_ES = {
   P: 'Peón',
@@ -29,6 +30,17 @@ const SAN_PIECE_NAME = {
   R: 'Rey'
 };
 
+const FILE_PHONETIC = {
+  a: 'a',
+  b: 'be',
+  c: 'ce',
+  d: 'de',
+  e: 'e',
+  f: 'efe',
+  g: 'ge',
+  h: 'hache'
+};
+
 export const CLASS_META = {
   brilliant:  { code: '!!', label: 'Brillante',    color: '#22d3ee', bg: 'rgba(34, 211, 238, 0.16)' },
   best:       { code: '★',  label: 'Mejor jugada', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.16)' },
@@ -39,9 +51,12 @@ export const CLASS_META = {
   blunder:    { code: '??', label: 'Error grave',  color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.20)' }
 };
 
-/**
- * Convierte notación algebraica en español (ej. Cxf6+, O-O, Dxg2#, e8=D) a frase natural hablada.
- */
+function squareToSpeech(sq) {
+  if (!sq || sq.length !== 2) return sq || '';
+  const f = FILE_PHONETIC[sq[0]] || sq[0];
+  return `${f} ${sq[1]}`;
+}
+
 function sanToSpanishSpeech(san) {
   if (!san) return '';
   let text = san.trim();
@@ -51,7 +66,7 @@ function sanToSpanishSpeech(san) {
     suffix = ', jaque mate';
     text = text.slice(0, -1);
   } else if (text.endsWith('+')) {
-    suffix = ', jaque';
+    suffix = ', con jaque';
     text = text.slice(0, -1);
   }
 
@@ -65,114 +80,161 @@ function sanToSpanishSpeech(san) {
     text = text.replace(/=[CATD]$/, '');
   }
 
-  // Pieza mayor o menor: C, A, T, D, R
   const pieceMatch = text.match(/^([CATDR])([a-h]?[1-8]?)(x?)([a-h][1-8])$/);
   if (pieceMatch) {
     const [, pLetter, disamb, cap, dest] = pieceMatch;
     const pName = SAN_PIECE_NAME[pLetter] || pLetter;
-    const fromPart = disamb ? ` de ${disamb}` : '';
+    let fromPart = '';
+    if (disamb) {
+      fromPart = disamb.length === 2
+        ? ` de ${squareToSpeech(disamb)}`
+        : ` de ${FILE_PHONETIC[disamb] || disamb}`;
+    }
     const action = cap ? ' captura en ' : ' a ';
-    return `${pName}${fromPart}${action}${dest}${promoSpeech}${suffix}`;
+    return `${pName}${fromPart}${action}${squareToSpeech(dest)}${promoSpeech}${suffix}`;
   }
 
-  // Captura de peón: exd5
   const pawnCap = text.match(/^([a-h])x([a-h][1-8])$/);
   if (pawnCap) {
-    return `peón de ${pawnCap[1]} captura en ${pawnCap[2]}${promoSpeech}${suffix}`;
+    const fileSpoken = FILE_PHONETIC[pawnCap[1]] || pawnCap[1];
+    return `peón de ${fileSpoken} captura en ${squareToSpeech(pawnCap[2])}${promoSpeech}${suffix}`;
   }
 
-  // Avance simple de peón: e4
   const pawnPush = text.match(/^([a-h][1-8])$/);
   if (pawnPush) {
-    return `peón a ${pawnPush[1]}${promoSpeech}${suffix}`;
+    return `peón a ${squareToSpeech(pawnPush[1])}${promoSpeech}${suffix}`;
   }
 
   return `${text}${promoSpeech}${suffix}`;
 }
 
-/**
- * Reemplaza jugadas algebraicas incrustadas en un texto para que el narrador las lea con naturalidad.
- */
 function humanizeTextForSpeech(rawText) {
   if (!rawText) return '';
   const tokenRegex = /\b(O-O-O|O-O|[CATDR][a-h]?[1-8]?x?[a-h][1-8](?:=[CATD])?[+#]?|[a-h]x[a-h][1-8](?:=[CATD])?[+#]?|[a-h][1-8](?:=[CATD])?[+#]?)\b/g;
-  return rawText.replace(tokenRegex, (match) => sanToSpanishSpeech(match));
+  return rawText
+    .replace(tokenRegex, (match) => sanToSpanishSpeech(match))
+    .replace(/(\d+)\.(\d+)/g, '$1,$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function scoreSpanishVoice(v) {
+  const name = (v.name || '').toLowerCase();
+  const lang = (v.lang || '').toLowerCase();
+  let score = 0;
+
+  if (name.includes('natural') || name.includes('online')) score += 120;
+  if (name.includes('google')) score += 95;
+  if (name.includes('neural') || name.includes('siri') || name.includes('enhanced') || name.includes('premium')) score += 85;
+  if (/dalia|elena|alvaro|álvaro|jorge|paulina|sabina|salome|salomé|monica|mónica|camila|mia|paloma/.test(name)) score += 35;
+  if (/^es-(mx|co|us|ve|do|419|ar|pe)/.test(lang)) score += 22;
+  else if (lang === 'es-es') score += 18;
+  if (/espeak|compact|robot/.test(name)) score -= 60;
+  return score;
 }
 
 class VoiceCoach {
-  constructor() {
+  constructor(onVoicesReady) {
     this.supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
-    this.enabled = this._loadPref();
+    this.onVoicesReady = onVoicesReady;
+    this.enabled = this._loadEnabledPref();
+    this.savedVoiceName = this._loadVoiceName();
+    this.spanishVoices = [];
     this.voice = null;
+    this._speakTimer = null;
 
     if (this.supported) {
-      this._pickSpanishVoice();
-      window.speechSynthesis.addEventListener?.('voiceschanged', () => this._pickSpanishVoice());
+      this._refreshVoices();
+      window.speechSynthesis.addEventListener?.('voiceschanged', () => {
+        this._refreshVoices();
+        if (this.onVoicesReady) this.onVoicesReady();
+      });
     }
   }
 
-  _loadPref() {
+  _loadEnabledPref() {
     try {
-      const saved = localStorage.getItem(VOICE_STORAGE_KEY);
-      if (saved === 'off') return false;
-    } catch {
-      // ignorar
-    }
+      if (localStorage.getItem(VOICE_STORAGE_KEY) === 'off') return false;
+    } catch { /* ignorar */ }
     return true;
   }
 
-  _pickSpanishVoice() {
+  _loadVoiceName() {
+    try {
+      return localStorage.getItem(VOICE_NAME_KEY) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  _refreshVoices() {
     if (!this.supported) return;
-    const voices = window.speechSynthesis.getVoices() || [];
-    const esVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith('es'));
-    if (esVoices.length === 0) return;
+    const all = window.speechSynthesis.getVoices() || [];
+    const es = all.filter(v => (v.lang || '').toLowerCase().startsWith('es'));
+    es.sort((a, b) => scoreSpanishVoice(b) - scoreSpanishVoice(a));
+    this.spanishVoices = es;
 
-    // Priorizar voces naturales en español (Google / Microsoft / latinoamérica / España)
-    const preferred =
-      esVoices.find(v => /google|natural|sabina|paulina|dalia|elena|monica/i.test(v.name)) ||
-      esVoices.find(v => /es-(us|mx|ve|do|co|es)/i.test(v.lang)) ||
-      esVoices[0];
+    if (this.savedVoiceName) {
+      const exact = es.find(v => v.name === this.savedVoiceName);
+      if (exact) {
+        this.voice = exact;
+        return;
+      }
+    }
+    this.voice = es[0] || null;
+  }
 
-    this.voice = preferred || null;
+  selectVoiceByName(name) {
+    const found = this.spanishVoices.find(v => v.name === name);
+    if (!found) return;
+    this.voice = found;
+    this.savedVoiceName = found.name;
+    try {
+      localStorage.setItem(VOICE_NAME_KEY, found.name);
+    } catch { /* ignorar */ }
   }
 
   toggle() {
     this.enabled = !this.enabled;
     try {
       localStorage.setItem(VOICE_STORAGE_KEY, this.enabled ? 'on' : 'off');
-    } catch {
-      // ignorar
-    }
+    } catch { /* ignorar */ }
     if (!this.enabled) this.stop();
     return this.enabled;
   }
 
   stop() {
+    if (this._speakTimer) {
+      clearTimeout(this._speakTimer);
+      this._speakTimer = null;
+    }
     if (!this.supported) return;
     try {
       window.speechSynthesis.cancel();
-    } catch {
-      // ignorar
-    }
+    } catch { /* ignorar */ }
   }
 
   speak(text, force = false) {
     if (!this.supported || (!this.enabled && !force) || !text) return;
     this.stop();
 
-    if (!this.voice) this._pickSpanishVoice();
+    if (!this.voice) this._refreshVoices();
 
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = this.voice?.lang || 'es-ES';
-    if (this.voice) utter.voice = this.voice;
-    utter.rate = 1.03;
-    utter.pitch = 1.0;
+    // Pequeña pausa tras cancel() evita cortes en Chrome y Edge
+    this._speakTimer = setTimeout(() => {
+      this._speakTimer = null;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = this.voice?.lang || 'es-ES';
+      if (this.voice) utter.voice = this.voice;
 
-    try {
-      window.speechSynthesis.speak(utter);
-    } catch {
-      // ignorar si el navegador bloquea la reproducción sin gesto previo
-    }
+      const isNeural = /natural|online|google|neural/i.test(this.voice?.name || '');
+      utter.rate = isNeural ? 1.0 : 1.02;
+      utter.pitch = 1.0;
+
+      try {
+        window.speechSynthesis.speak(utter);
+      } catch { /* ignorar */ }
+    }, 45);
   }
 }
 
@@ -339,8 +401,15 @@ function ensureAnalyzerStyles() {
       border-color: var(--accent-cyan);
       color: var(--accent-cyan);
     }
-    .an-voice-btn:hover {
-      border-color: var(--accent-cyan);
+    .an-voice-btn:hover { border-color: var(--accent-cyan); }
+    .an-voice-select {
+      width: 100%;
+      background: rgba(9, 13, 22, 0.72);
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      border-radius: 7px;
+      padding: 5px 8px;
+      font-size: 0.73rem;
     }
 
     .an-coach {
@@ -461,16 +530,19 @@ function moveDestCol(m) {
 }
 
 export class GameAnalyzer {
-  constructor({ postgameSlotEl, modalActionsEl, onReviewStep, onExitReview, onAnalysisReady }) {
+  constructor({ postgameSlotEl, modalActionsEl, deferVoice = true, onReviewStep, onExitReview, onAnalysisReady }) {
     ensureAnalyzerStyles();
     this.postgameSlotEl = postgameSlotEl;
     this.modalActionsEl = modalActionsEl;
+    this.deferVoice = deferVoice;
     this.onReviewStep = onReviewStep;
     this.onExitReview = onExitReview;
     this.onAnalysisReady = onAnalysisReady;
 
     this.ai = new ChessAI();
-    this.voice = new VoiceCoach();
+    this.voice = new VoiceCoach(() => {
+      if (this.inReview) this._renderReviewPanel();
+    });
     this.reset();
     this._bindKeyboard();
   }
@@ -539,7 +611,7 @@ export class GameAnalyzer {
     if (this.postgameSlotEl) {
       this.postgameSlotEl.innerHTML = `
         <div class="an-box">
-          <button class="an-launch-btn" id="an-launch-panel">📊 Analizar Partida (con Voz)</button>
+          <button class="an-launch-btn" id="an-launch-panel">📊 Analizar Partida (con Voz y Animaciones)</button>
         </div>
       `;
       this.postgameSlotEl.querySelector('#an-launch-panel')?.addEventListener('click', () => {
@@ -811,7 +883,7 @@ export class GameAnalyzer {
       }
 
       if (classification === 'inaccuracy') {
-        return `${played.san} es jugable, pero cede algo de ventaja (${(cpLoss / 100).toFixed(1)} peones). Yo preferiría ${bestSan}, porque ${whyBest()}.`;
+        return `${played.san} es jugable, pero cede algo de ventaja, alrededor de ${(cpLoss / 100).toFixed(1)} peones. Yo preferiría ${bestSan}, porque ${whyBest()}.`;
       }
 
       return `${played.san} debilita seriamente tu posición y permite un contragolpe rival. Yo habría hecho ${bestSan}, ya que ${whyBest()}.`;
@@ -845,12 +917,15 @@ export class GameAnalyzer {
     return `Jugada correcta y consistente: ${played.san} sostiene bien la posición. Otra opción ligeramente más activa era ${bestSan}, que ${whyBest()}.`;
   }
 
-  _speakCurrentPly(force = false) {
+  /**
+   * Construye un guión natural y conversacional para el entrenador por voz.
+   */
+  speakCurrentPly(force = false) {
     if (!this.inReview) return;
     if (this.currentPly <= 0) {
       if (force && this.summary) {
         this.voice.speak(
-          `Posición inicial número ${this.positionId}. Precisión de Blancas: ${this.summary.whiteAcc} por ciento. Precisión de Negras: ${this.summary.blackAcc} por ciento.`,
+          `Posición inicial número ${this.positionId}. Las blancas lograron un ${this.summary.whiteAcc} por ciento de precisión, y las negras un ${this.summary.blackAcc} por ciento.`,
           true
         );
       } else {
@@ -862,14 +937,25 @@ export class GameAnalyzer {
     const item = this.results[this.currentPly - 1];
     if (!item) return;
 
-    const meta = CLASS_META[item.classification];
-    const moveNum = Math.floor((this.currentPly - 1) / 2) + 1;
-    const side = item.played.color === 'w' ? 'Blancas' : 'Negras';
+    const side = item.played.color === 'w' ? 'Las blancas juegan' : 'Las negras responden con';
     const spokenMove = sanToSpanishSpeech(item.played.san);
     const spokenComment = humanizeTextForSpeech(item.comment);
 
-    const script = `Jugada ${moveNum}, ${side}: ${spokenMove}. ${meta.label}. ${spokenComment}`;
-    this.voice.speak(script, force);
+    const intros = {
+      brilliant:  `${side} ${spokenMove}. ¡Qué jugada tan brillante!`,
+      best:       `${side} ${spokenMove}. La mejor jugada de la posición.`,
+      excellent:  `${side} ${spokenMove}. Muy buena jugada.`,
+      good:       `${side} ${spokenMove}. Jugada sólida.`,
+      inaccuracy: `${side} ${spokenMove}. Aquí hay una ligera imprecisión.`,
+      mistake:    `${side} ${spokenMove}. Cuidado, esto es un error.`,
+      blunder:    `${side} ${spokenMove}. Atención, error grave.`
+    };
+
+    const intro = item.played.san.endsWith('#')
+      ? `${side} ${spokenMove}.`
+      : (intros[item.classification] || `${side} ${spokenMove}.`);
+
+    this.voice.speak(`${intro} ${spokenComment}`, force);
   }
 
   _renderProgress(done, total) {
@@ -892,19 +978,28 @@ export class GameAnalyzer {
 
   goToPly(ply) {
     if (!this.frames.length) return;
+    const prevPly = this.currentPly;
     const clamped = Math.max(0, Math.min(this.frames.length - 1, ply));
     this.currentPly = clamped;
     this.inReview = true;
 
+    this.voice.stop();
     this._renderReviewPanel();
-    this._speakCurrentPly(false);
+
+    if (!this.deferVoice) {
+      this.speakCurrentPly(false);
+    }
 
     if (this.onReviewStep) {
       this.onReviewStep({
         ply: clamped,
+        prevPly,
         engine: this.frames[clamped].engine,
+        prevEngine: clamped > 0 ? this.frames[clamped - 1].engine : null,
         lastMove: this.frames[clamped].lastMove,
-        analysis: clamped > 0 ? this.results[clamped - 1] : null
+        analysis: clamped > 0 ? this.results[clamped - 1] : null,
+        speak: () => this.speakCurrentPly(false),
+        stopVoice: () => this.voice.stop()
       });
     }
   }
@@ -951,7 +1046,7 @@ export class GameAnalyzer {
             <span class="an-coach-badge" style="color:var(--accent-cyan);background:rgba(56,189,248,0.16)">INICIO #${this.positionId}</span>
             <span class="an-coach-move">Posición inicial</span>
           </div>
-          <div class="an-coach-body">Usa las flechas ◀ ▶ (o haz clic en cualquier jugada del historial) para escuchar y leer el análisis completo.</div>
+          <div class="an-coach-body">Usa las flechas ◀ ▶ (o haz clic en cualquier jugada del historial) para ver las animaciones y escuchar el análisis.</div>
         </div>
       `;
     } else {
@@ -973,6 +1068,15 @@ export class GameAnalyzer {
     }
 
     const voiceOn = this.voice.enabled;
+    const voiceOptions = this.voice.spanishVoices
+      .slice(0, 12)
+      .map(v => {
+        const selected = this.voice.voice && v.name === this.voice.voice.name ? 'selected' : '';
+        const cleanName = v.name.replace(/Microsoft |Google |Online \(Natural\) - /g, '');
+        return `<option value="${v.name.replace(/"/g, '"')}" ${selected}>🎙 ${cleanName} (${v.lang})</option>`;
+      })
+      .join('');
+
     const voiceControls = this.voice.supported
       ? `
         <div class="an-voice-bar">
@@ -981,6 +1085,7 @@ export class GameAnalyzer {
           </button>
           <button id="an-voice-replay" class="an-voice-btn">🗣 Repetir Voz</button>
         </div>
+        ${this.voice.spanishVoices.length > 1 ? `<select id="an-voice-select" class="an-voice-select" title="Seleccionar voz del entrenador">${voiceOptions}</select>` : ''}
       `
       : '';
 
@@ -1027,10 +1132,14 @@ export class GameAnalyzer {
     this.postgameSlotEl.querySelector('#an-voice-toggle')?.addEventListener('click', () => {
       const active = this.voice.toggle();
       this._renderReviewPanel();
-      if (active) this._speakCurrentPly(false);
+      if (active) this.speakCurrentPly(false);
     });
     this.postgameSlotEl.querySelector('#an-voice-replay')?.addEventListener('click', () => {
-      this._speakCurrentPly(true);
+      this.speakCurrentPly(true);
+    });
+    this.postgameSlotEl.querySelector('#an-voice-select')?.addEventListener('change', (e) => {
+      this.voice.selectVoiceByName(e.target.value);
+      this.speakCurrentPly(true);
     });
   }
 
