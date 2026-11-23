@@ -14,6 +14,7 @@ import { attachSocialFeatures } from './social.js';
 import { attachHistoryVault } from './history_vault.js';
 import { attachDailyMissions } from './missions.js';
 import { attachGlobalMatchmaking } from './matchmaking.js';
+import { attachDashboardPro } from './dashboard_pro.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -68,8 +69,11 @@ function attachPlugins() {
   attachHistoryVault(app);
   attachDailyMissions(app);
 
-  // Fase 16: Emparejamiento Global por ELO + Ranking Top 5 en Firebase
+  // Fase 16: Emparejamiento Global por ELO (3+2, 5+3, 10m, 30m) + Ranking Top 5
   attachGlobalMatchmaking(app);
+
+  // Fase 16B: Problema del Día, Revisar última partida, Racha semanal, Bandera y ELO por ritmo
+  attachDashboardPro(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
