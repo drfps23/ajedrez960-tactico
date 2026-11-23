@@ -23,8 +23,9 @@ function ensureAvatarStyles() {
   const style = document.createElement('style');
   style.dataset.coachAvatarCss = 'true';
   style.textContent = `
-    /* Layout de 3 columnas en Revisión: Entrenador (Izq) · Tablero (Centro) · Controles (Der) */
-    body.review-coach-open main.arena {
+    /* Solo aplica 3 columnas cuando la arena está visible */
+    main.arena.hidden { display: none !important; }
+    body.review-coach-open main.arena:not(.hidden) {
       display: grid !important;
       grid-template-columns: 270px minmax(360px, 560px) minmax(280px, 350px) !important;
       max-width: 1320px !important;
@@ -81,9 +82,7 @@ function ensureAvatarStyles() {
       flex-shrink: 0;
       animation: coachBreathe 3.2s ease-in-out infinite;
     }
-    .coach-dock-panel.speaking .coach-portrait {
-      animation: coachTalkBob 0.52s ease-in-out infinite;
-    }
+    .coach-dock-panel.speaking .coach-portrait { animation: coachTalkBob 0.52s ease-in-out infinite; }
     .coach-portrait svg { width: 112px; height: 112px; }
     .coach-eyes { transform-origin: 32px 27px; animation: coachBlink 4.6s infinite; }
     .coach-mouth-talk { opacity: 0; transform-origin: 32px 37px; }
@@ -139,21 +138,15 @@ function ensureAvatarStyles() {
     }
     .coach-swap-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
 
-    /* Tablet / Móvil: tarjeta horizontal compacta arriba del tablero */
     @media (max-width: 1140px) {
-      body.review-coach-open main.arena {
+      body.review-coach-open main.arena:not(.hidden) {
         grid-template-columns: 1fr !important;
         max-width: 640px !important;
       }
-      .tr-layout.tr-with-coach {
-        grid-template-columns: 1fr !important;
-      }
+      .tr-layout.tr-with-coach { grid-template-columns: 1fr !important; }
       .coach-dock-panel {
-        position: static;
-        flex-direction: row;
-        flex-wrap: wrap;
-        align-items: center;
-        padding: 12px;
+        position: static; flex-direction: row; flex-wrap: wrap;
+        align-items: center; padding: 12px;
       }
       .coach-portrait { width: 76px; height: 76px; }
       .coach-portrait svg { width: 70px; height: 70px; }
@@ -414,12 +407,24 @@ export function attachCoachAvatar(app) {
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
 
+  // Cerrar revisión limpiamente si el usuario navega fuera del tablero
+  if (app.shell?.navigate) {
+    const origNav = app.shell.navigate.bind(app.shell);
+    app.shell.navigate = (viewId) => {
+      if (viewId !== 'play') {
+        if (app.analyzer?.inReview) app.analyzer.exitReview();
+        else closeReviewDock();
+      }
+      return origNav(viewId);
+    };
+  }
+
   // 1. Montar cabina izquierda en el Analizador Post-Partida
   const origReview = app.analyzer._renderReviewPanel.bind(app.analyzer);
   app.analyzer._renderReviewPanel = () => {
     origReview();
     const arena = document.querySelector('main.arena');
-    if (!arena || !app.analyzer.inReview) return;
+    if (!arena || !app.analyzer.inReview || app.shell.currentView !== 'play') return;
 
     const ply = app.analyzer.currentPly;
     const item = ply > 0 ? app.analyzer.results[ply - 1] : null;
@@ -459,7 +464,7 @@ export function attachCoachAvatar(app) {
   const origReset = app.analyzer.reset.bind(app.analyzer);
   app.analyzer.reset = () => { closeReviewDock(); return origReset(); };
 
-  // 2. Montar cabina izquierda en la Academia de Aperturas
+  // 2. Montar cabina izquierda en la Academia Interactiva
   if (app.academy) {
     const syncAcademyDock = () => {
       const layout = app.academy.container?.querySelector('.tr-layout');
