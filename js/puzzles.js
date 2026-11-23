@@ -1,7 +1,7 @@
 import { Chess960Engine, FILES } from './engine.js';
 import { CombatFX } from './fx.js';
 import { THEMES } from './themes.js';
-import { PUZZLES } from './data/puzzles_data.js';
+import { PUZZLE_LEVELS, PUZZLES } from './data/puzzles_data.js';
 
 const SOLVED_KEY = 'ajedrez960_puzzles_solved_v1';
 
@@ -10,6 +10,22 @@ function ensureTrainerStyles() {
   const style = document.createElement('style');
   style.dataset.trainerCss = 'true';
   style.textContent = `
+    .tr-levels {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px; margin-bottom: 12px;
+    }
+    .tr-level-btn {
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 11px;
+      padding: 9px 12px; color: var(--text-main); cursor: pointer; text-align: left;
+      display: flex; flex-direction: column; gap: 3px; transition: border-color 0.15s;
+    }
+    .tr-level-btn:hover { border-color: var(--accent-cyan); }
+    .tr-level-btn.active {
+      border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.14);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
+    }
+    .tr-level-btn strong { font-size: 0.82rem; }
+    .tr-level-btn span { font-size: 0.7rem; color: var(--text-muted); }
     .tr-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .tr-layout {
       display: grid; grid-template-columns: minmax(280px, 510px) minmax(260px, 1fr);
@@ -31,7 +47,7 @@ function ensureTrainerStyles() {
       padding: 6px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
     }
     .tr-pill.active { border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.16); color: var(--accent-cyan); }
-    .tr-pill.solved { border-color: rgba(34, 197, 94, 0.5); }
+    .tr-pill.solved { border-color: rgba(34, 197, 94, 0.55); }
     .tr-feedback {
       background: rgba(9, 13, 22, 0.65); border: 1px solid var(--border-color);
       border-left: 4px solid var(--accent-cyan); border-radius: 9px;
@@ -39,7 +55,9 @@ function ensureTrainerStyles() {
     }
     .tr-feedback.ok { border-left-color: #22c55e; color: #bbf7d0; }
     .tr-feedback.err { border-left-color: #f43f5e; color: #fecdd3; }
+    .tr-feedback.task { border-left-color: #facc15; color: #fef08a; background: rgba(250, 204, 21, 0.08); }
     .tr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .square.hint-sq { box-shadow: inset 0 0 0 3px #facc15; }
     @media (max-width: 860px) { .tr-layout { grid-template-columns: 1fr; } }
   `;
   document.head.appendChild(style);
@@ -50,15 +68,12 @@ function loadFenIntoEngine(fen) {
   const parts = fen.trim().split(/\s+/);
   const rows = parts[0].split('/');
   eng.board = Array.from({ length: 8 }, () => new Array(8).fill(null));
-
   for (let r = 0; r < 8; r++) {
     let c = 0;
     for (const ch of rows[r]) {
-      if (ch >= '1' && ch <= '8') {
-        c += parseInt(ch, 10);
-      } else {
-        const isW = ch === ch.toUpperCase();
-        eng.board[r][c] = { color: isW ? 'w' : 'b', type: ch.toUpperCase() };
+      if (ch >= '1' && ch <= '8') c += parseInt(ch, 10);
+      else {
+        eng.board[r][c] = { color: ch === ch.toUpperCase() ? 'w' : 'b', type: ch.toUpperCase() };
         c++;
       }
     }
@@ -84,28 +99,25 @@ export class PuzzleTrainer {
   constructor(app) {
     ensureTrainerStyles();
     this.app = app;
+    this.level = 1;
     this.filter = 'all';
     this.currentId = PUZZLES[0].id;
     this.solved = this._loadSolved();
     this.fx = null;
     this.busy = false;
     this.hidden = new Set();
+    this.hintSquares = new Set();
     this.defeatedKingSq = null;
   }
 
   _loadSolved() {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(SOLVED_KEY) || '[]'));
-    } catch {
-      return new Set();
-    }
+    try { return new Set(JSON.parse(localStorage.getItem(SOLVED_KEY) || '[]')); }
+    catch { return new Set(); }
   }
 
   _markSolved(id) {
     this.solved.add(id);
-    try {
-      localStorage.setItem(SOLVED_KEY, JSON.stringify([...this.solved]));
-    } catch { /* ignorar */ }
+    try { localStorage.setItem(SOLVED_KEY, JSON.stringify([...this.solved])); } catch { /* ignorar */ }
   }
 
   stop() {
@@ -119,13 +131,15 @@ export class PuzzleTrainer {
   }
 
   _filteredList() {
-    if (this.filter === 'all') return PUZZLES;
-    return PUZZLES.filter(p => p.variant === this.filter);
+    return PUZZLES.filter(p =>
+      p.level === this.level && (this.filter === 'all' || p.variant === this.filter)
+    );
   }
 
   loadPuzzle(id) {
     const p = PUZZLES.find(item => item.id === id) || PUZZLES[0];
     this.puzzle = p;
+    this.level = p.level;
     this.currentId = p.id;
     this.engine = loadFenIntoEngine(p.fen);
     this.stepIdx = 0;
@@ -134,8 +148,12 @@ export class PuzzleTrainer {
     this.busy = false;
     this.done = false;
     this.hidden.clear();
+    this.hintSquares.clear();
     this.defeatedKingSq = null;
-    this.feedback = { type: 'info', text: `Tu turno (${this.engine.turn === 'w' ? 'Blancas' : 'Negras'}). Encuentra la secuencia ganadora.` };
+    this.feedback = {
+      type: 'info',
+      text: `Tu turno (${this.engine.turn === 'w' ? 'Blancas' : 'Negras'}). Encuentra la secuencia exacta.`
+    };
     this._renderScaffold();
   }
 
@@ -143,30 +161,46 @@ export class PuzzleTrainer {
     if (!this.container) return;
     const list = this._filteredList();
     const isPro = this.app.store.hasAccess('pro_puzzles');
+    const lvlInfo = PUZZLE_LEVELS.find(l => l.id === this.level) || PUZZLE_LEVELS[0];
 
     this.container.innerHTML = `
-      <div class="sec-head" style="margin-bottom:14px">
+      <div class="sec-head" style="margin-bottom:12px">
         <div>
           <h2>🧩 Problemas Tácticos (${this.solved.size}/${PUZZLES.length})</h2>
-          <p class="sec-sub">Entrena remates en Ajedrez Clásico y Fischer 960 con animaciones de combate.</p>
+          <p class="sec-sub">Entrenamiento estratificado en 4 niveles para Ajedrez Clásico y Fischer 960.</p>
         </div>
         <button class="btn btn-secondary" id="pz-home">← Inicio</button>
       </div>
-      <div class="tr-bar" style="margin-bottom:12px">
+
+      <div class="tr-levels">
+        ${PUZZLE_LEVELS.map(l => {
+          const allInLvl = PUZZLES.filter(x => x.level === l.id);
+          const doneInLvl = allInLvl.filter(x => this.solved.has(x.id)).length;
+          const locked = l.proOnly && !isPro;
+          return `
+            <button class="tr-level-btn ${this.level === l.id ? 'active' : ''}" data-lvl="${l.id}" data-locked="${locked}">
+              <strong>${locked ? '🔒 ' : ''}${l.name}</strong>
+              <span>ELO ${l.elo} · ${doneInLvl}/${allInLvl.length} resueltos</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="tr-bar" style="margin-bottom:10px">
         <button class="tr-pill ${this.filter === 'all' ? 'active' : ''}" data-f="all">Todos</button>
         <button class="tr-pill ${this.filter === 'classic' ? 'active' : ''}" data-f="classic">♟ Clásico</button>
         <button class="tr-pill ${this.filter === 'fischer960' ? 'active' : ''}" data-f="fischer960">🎲 Fischer 960</button>
       </div>
+
       <div class="tr-list" style="margin-bottom:16px">
-        ${list.map((item) => {
-          const idx = PUZZLES.indexOf(item);
-          const locked = !isPro && idx >= 3;
+        ${list.map(item => {
           const ok = this.solved.has(item.id);
-          return `<button class="tr-pill ${item.id === this.puzzle.id ? 'active' : ''} ${ok ? 'solved' : ''}" data-pid="${item.id}" data-locked="${locked}">
-            ${locked ? '🔒 ' : (ok ? '✓ ' : '')}${item.title}
+          return `<button class="tr-pill ${item.id === this.puzzle.id ? 'active' : ''} ${ok ? 'solved' : ''}" data-pid="${item.id}">
+            ${ok ? '✓ ' : ''}${item.title}
           </button>`;
         }).join('')}
       </div>
+
       <div class="tr-layout">
         <div class="tr-board-wrap" id="pz-wrap">
           <div class="board-grid" id="pz-grid"></div>
@@ -175,7 +209,7 @@ export class PuzzleTrainer {
         <div class="tr-panel">
           <div class="status-row">
             <span class="pos-badge">${this.puzzle.theme}</span>
-            <span class="turn-pill">${this.puzzle.difficulty}</span>
+            <span class="turn-pill">${lvlInfo.elo} ELO</span>
           </div>
           <h3>${this.puzzle.title}</h3>
           <div class="tr-feedback ${this.feedback.type}" id="pz-fb">${this.feedback.text}</div>
@@ -195,31 +229,40 @@ export class PuzzleTrainer {
     if (theme) this.fx.setPalette(theme.fxPalette);
 
     this.container.querySelector('#pz-home').addEventListener('click', () => this.app.shell.navigate('home'));
+    this.container.querySelectorAll('[data-lvl]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.locked === 'true') { this.app.shell.navigate('subscription'); return; }
+      this.level = Number(b.dataset.lvl);
+      const next = this._filteredList()[0] || PUZZLES.find(x => x.level === this.level);
+      if (next) this.loadPuzzle(next.id);
+    }));
     this.container.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
       this.filter = b.dataset.f;
       const next = this._filteredList()[0];
-      this.loadPuzzle(next ? next.id : PUZZLES[0].id);
+      if (next) this.loadPuzzle(next.id);
     }));
     this.container.querySelectorAll('[data-pid]').forEach(b => b.addEventListener('click', () => {
-      if (b.dataset.locked === 'true') {
-        this.app.shell.navigate('subscription');
-        return;
-      }
       this.loadPuzzle(b.dataset.pid);
     }));
     this.container.querySelector('#pz-hint').addEventListener('click', () => {
-      this._setFeedback('info', `💡 Pista: ${this.puzzle.hint}`);
+      const exp = uciToCoords(this.puzzle.solution[this.stepIdx] || this.puzzle.solution[0]);
+      this.hintSquares = new Set([`${exp.from.r},${exp.from.c}`]);
+      this._setFeedback('task', `💡 Pista: ${this.puzzle.hint}`);
+      this._renderBoard();
     });
     this.container.querySelector('#pz-retry').addEventListener('click', () => this.loadPuzzle(this.puzzle.id));
     this.container.querySelector('#pz-next').addEventListener('click', () => {
       const items = this._filteredList();
       const idx = items.findIndex(x => x.id === this.puzzle.id);
-      const next = items[(idx + 1) % items.length];
-      if (!isPro && PUZZLES.indexOf(next) >= 3) {
-        this.app.shell.navigate('subscription');
-        return;
+      if (idx >= 0 && idx + 1 < items.length) {
+        this.loadPuzzle(items[idx + 1].id);
+      } else {
+        const nextLvl = this.level < 4 ? this.level + 1 : 1;
+        const lvlObj = PUZZLE_LEVELS.find(l => l.id === nextLvl);
+        if (lvlObj?.proOnly && !isPro) { this.app.shell.navigate('subscription'); return; }
+        this.level = nextLvl;
+        const first = this._filteredList()[0] || PUZZLES.find(x => x.level === nextLvl);
+        if (first) this.loadPuzzle(first.id);
       }
-      this.loadPuzzle(next.id);
     });
 
     this._renderBoard();
@@ -235,15 +278,10 @@ export class PuzzleTrainer {
 
   _onSquareClick(r, c) {
     if (this.busy || this.done) return;
-
     if (this.selected) {
       const match = this.legal.find(m => m.to.r === r && m.to.c === c);
-      if (match) {
-        this._checkMove(match);
-        return;
-      }
+      if (match) { this._checkMove(match); return; }
     }
-
     const p = this.engine.board[r][c];
     if (p && p.color === this.engine.turn) {
       this.selected = { r, c };
@@ -259,16 +297,16 @@ export class PuzzleTrainer {
     const expected = uciToCoords(this.puzzle.solution[this.stepIdx]);
     const ok = move.from.r === expected.from.r && move.from.c === expected.from.c &&
                move.to.r === expected.to.r && move.to.c === expected.to.c;
-
     this.selected = null;
     this.legal = [];
 
     if (!ok) {
-      this._setFeedback('err', 'No es la jugada exacta. Observa las amenazas o toca "Pista".');
+      this._setFeedback('err', 'Esa no es la línea ganadora. Vuelve a calcular o pulsa "Pista".');
       this._renderBoard();
       return;
     }
 
+    this.hintSquares.clear();
     this._playAnimatedMove(move, () => {
       this.stepIdx++;
       if (this.stepIdx >= this.puzzle.solution.length) {
@@ -278,7 +316,6 @@ export class PuzzleTrainer {
         this._renderBoard();
         return;
       }
-      // Respuesta automática del rival
       setTimeout(() => {
         const reply = uciToCoords(this.puzzle.solution[this.stepIdx]);
         const legal = this.engine.getLegalMoves(this.engine.turn);
@@ -286,7 +323,7 @@ export class PuzzleTrainer {
         if (replyMove) {
           this._playAnimatedMove(replyMove, () => {
             this.stepIdx++;
-            this._setFeedback('info', '¡Bien! Ahora remata la combinación.');
+            this._setFeedback('info', '¡Excelente! Continúa la combinación.');
           });
         }
       }, 280);
@@ -366,6 +403,7 @@ export class PuzzleTrainer {
         if (last && last.from.r === r && last.from.c === c) sq.classList.add('last-from');
         if (last && last.to.r === r && last.to.c === c) sq.classList.add('last-to');
         if (this.selected && this.selected.r === r && this.selected.c === c) sq.classList.add('selected');
+        if (this.hintSquares.has(`${r},${c}`)) sq.classList.add('hint-sq');
 
         const m = this.legal.find(x => x.to.r === r && x.to.c === c);
         if (m) {
