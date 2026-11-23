@@ -1,9 +1,11 @@
 export const CLOCK_PRESETS = [
-  { id: 'off',   label: '⏱ Sin reloj',    baseSec: 0,   incSec: 0 },
-  { id: '3+2',   label: '⚡ 3 + 2 Fischer', baseSec: 180, incSec: 2 },
-  { id: '5+3',   label: '🔥 5 + 3 Fischer', baseSec: 300, incSec: 3 },
-  { id: '10+5',  label: '♟ 10 + 5 Fischer', baseSec: 600, incSec: 5 },
-  { id: '15+10', label: '🏛 15 + 10 Fischer', baseSec: 900, incSec: 10 }
+  { id: 'off',   label: '⏱ Sin reloj',        baseSec: 0,    incSec: 0 },
+  { id: '3+2',   label: '⚡ 3 + 2 Blitz',      baseSec: 180,  incSec: 2 },
+  { id: '5+3',   label: '🔥 5 + 3 Blitz',      baseSec: 300,  incSec: 3 },
+  { id: '10+0',  label: '⏱ 10 min Rápida',    baseSec: 600,  incSec: 0 },
+  { id: '10+5',  label: '♟ 10 + 5 Rápida',    baseSec: 600,  incSec: 5 },
+  { id: '15+10', label: '🏛 15 + 10 Clásica',  baseSec: 900,  incSec: 10 },
+  { id: '30+0',  label: '👑 30 min Clásica',   baseSec: 1800, incSec: 0 }
 ];
 
 function ensureClockStyles() {
@@ -11,62 +13,31 @@ function ensureClockStyles() {
   const style = document.createElement('style');
   style.dataset.clockCss = 'true';
   style.textContent = `
-    .clock-select {
-      min-width: 148px;
-    }
-    .clock-slot {
-      display: flex;
-      align-items: center;
-      margin-left: auto;
-    }
+    .clock-select { min-width: 152px; }
+    .clock-slot { display: flex; align-items: center; margin-left: auto; }
     .clock-box {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-      font-size: 1.05rem;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      padding: 5px 12px;
-      border-radius: 8px;
-      background: rgba(9, 13, 22, 0.72);
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
-      min-width: 88px;
-      text-align: center;
+      font-size: 1.05rem; font-weight: 800; letter-spacing: 0.04em;
+      padding: 5px 12px; border-radius: 8px;
+      background: rgba(9, 13, 22, 0.72); border: 1px solid var(--border-color);
+      color: var(--text-muted); min-width: 88px; text-align: center;
       transition: border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
     }
-    .clock-box.hidden {
-      display: none;
-    }
+    .clock-box.hidden { display: none; }
     .clock-box.active {
-      color: var(--text-main);
-      border-color: var(--accent-cyan);
-      background: rgba(56, 189, 248, 0.14);
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.28);
+      color: var(--text-main); border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.14); box-shadow: 0 0 12px rgba(56, 189, 248, 0.28);
     }
     .clock-box.low-time {
-      color: #fecdd3;
-      border-color: #f43f5e;
-      background: rgba(244, 63, 94, 0.24);
-      box-shadow: 0 0 14px rgba(244, 63, 94, 0.45);
-      animation: clockPulse 0.8s ease-in-out infinite;
+      color: #fecdd3; border-color: #f43f5e; background: rgba(244, 63, 94, 0.24);
+      box-shadow: 0 0 14px rgba(244, 63, 94, 0.45); animation: clockPulse 0.8s ease-in-out infinite;
     }
-    .clock-box.flagged {
-      color: #ffffff;
-      border-color: #ef4444;
-      background: #dc2626;
-      animation: none;
-    }
+    .clock-box.flagged { color: #ffffff; border-color: #ef4444; background: #dc2626; animation: none; }
     .clock-inc-tag {
-      display: inline-block;
-      font-size: 0.68rem;
-      font-weight: 700;
-      color: var(--accent-gold);
-      margin-left: 5px;
-      vertical-align: middle;
+      display: inline-block; font-size: 0.68rem; font-weight: 700;
+      color: var(--accent-gold); margin-left: 5px; vertical-align: middle;
     }
-    @keyframes clockPulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.04); }
-    }
+    @keyframes clockPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
   `;
   document.head.appendChild(style);
 }
@@ -92,7 +63,7 @@ export class FischerClock {
     this.controlsHostEl = controlsHostEl;
     this.onTimeout = onTimeout;
 
-    this.preset = CLOCK_PRESETS[0]; // off por defecto
+    this.preset = CLOCK_PRESETS[0];
     this.remaining = { w: 0, b: 0 };
     this.activeColor = null;
     this.running = false;
@@ -108,11 +79,10 @@ export class FischerClock {
   }
 
   _mountUI() {
-    // Selector en la barra superior
     this.selectEl = document.createElement('select');
     this.selectEl.id = 'clock-select';
     this.selectEl.className = 'ctrl-select clock-select';
-    this.selectEl.title = 'Control de tiempo (Incremento Fischer)';
+    this.selectEl.title = 'Control de tiempo';
 
     CLOCK_PRESETS.forEach((p) => {
       const opt = document.createElement('option');
@@ -121,41 +91,22 @@ export class FischerClock {
       this.selectEl.appendChild(opt);
     });
 
-    this.selectEl.addEventListener('change', (e) => {
-      this.setPreset(e.target.value);
-    });
+    this.selectEl.addEventListener('change', (e) => this.setPreset(e.target.value));
+    if (this.controlsHostEl) this.controlsHostEl.appendChild(this.selectEl);
 
-    if (this.controlsHostEl) {
-      this.controlsHostEl.appendChild(this.selectEl);
-    }
-
-    // Relojes en las barras superior e inferior
     this.topBox = document.createElement('div');
     this.topBox.className = 'clock-box hidden';
     this.bottomBox = document.createElement('div');
     this.bottomBox.className = 'clock-box hidden';
 
-    if (this.topSlotEl) {
-      this.topSlotEl.innerHTML = '';
-      this.topSlotEl.appendChild(this.topBox);
-    }
-    if (this.bottomSlotEl) {
-      this.bottomSlotEl.innerHTML = '';
-      this.bottomSlotEl.appendChild(this.bottomBox);
-    }
+    if (this.topSlotEl) { this.topSlotEl.innerHTML = ''; this.topSlotEl.appendChild(this.topBox); }
+    if (this.bottomSlotEl) { this.bottomSlotEl.innerHTML = ''; this.bottomSlotEl.appendChild(this.bottomBox); }
   }
 
-  isEnabled() {
-    return this.preset.baseSec > 0;
-  }
+  isEnabled() { return this.preset.baseSec > 0; }
 
-  /**
-   * Regla inteligente por modo:
-   * - Contra IA: desactivado por defecto (evita ventaja mecánica de velocidad de la IA).
-   * - 2 Jugadores / Online: activado por defecto en 5+3 Fischer.
-   */
   applyModeDefault(mode) {
-    const defaultId = (mode === 'pvp' || mode === 'online') ? '5+3' : 'off';
+    const defaultId = (mode === 'pvp' || mode === 'online') ? '10+0' : 'off';
     this.setPreset(defaultId);
   }
 
@@ -177,10 +128,7 @@ export class FischerClock {
     this.render();
   }
 
-  syncOrientation(flipped) {
-    this.flipped = flipped;
-    this.render();
-  }
+  syncOrientation(flipped) { this.flipped = flipped; this.render(); }
 
   pause() {
     if (!this.running) return;
@@ -197,22 +145,14 @@ export class FischerClock {
     this._startInterval();
   }
 
-  /**
-   * Llamar al completarse una jugada: suma incremento Fischer al jugador que movió
-   * y arranca el reloj del siguiente turno.
-   */
   onMoveCompleted(moverColor, nextTurnColor) {
     if (!this.isEnabled() || this.flaggedColor) return;
-
     if (this.started) {
       this._consumeElapsed();
-      // Incremento Fischer solo después de que el jugador jugó con el reloj activo
       this.remaining[moverColor] += this.preset.incSec * 1000;
     } else {
-      // El reloj comienza a correr a partir de la primera jugada del tablero
       this.started = true;
     }
-
     this.activeColor = nextTurnColor;
     this.pausedForAnim = false;
     this.running = true;
@@ -244,17 +184,8 @@ export class FischerClock {
     this.render();
   }
 
-  _startInterval() {
-    this._clearInterval();
-    this.timerId = setInterval(() => this._tick(), 100);
-  }
-
-  _clearInterval() {
-    if (this.timerId) {
-      clearInterval(this.timerId);
-      this.timerId = null;
-    }
-  }
+  _startInterval() { this._clearInterval(); this.timerId = setInterval(() => this._tick(), 100); }
+  _clearInterval() { if (this.timerId) { clearInterval(this.timerId); this.timerId = null; } }
 
   _consumeElapsed() {
     if (!this.running || !this.activeColor) return;
@@ -267,7 +198,6 @@ export class FischerClock {
   _tick() {
     if (!this.running || !this.activeColor) return;
     this._consumeElapsed();
-
     if (this.remaining[this.activeColor] <= 0) {
       const loser = this.activeColor;
       const winner = loser === 'w' ? 'b' : 'w';
@@ -278,7 +208,6 @@ export class FischerClock {
       if (this.onTimeout) this.onTimeout(loser, winner);
       return;
     }
-
     this.render();
   }
 
@@ -287,12 +216,8 @@ export class FischerClock {
     this.topBox.classList.toggle('hidden', !enabled);
     this.bottomBox.classList.toggle('hidden', !enabled);
     if (!enabled) return;
-
-    const topColor = this.flipped ? 'w' : 'b';
-    const bottomColor = this.flipped ? 'b' : 'w';
-
-    this._renderBox(this.topBox, topColor);
-    this._renderBox(this.bottomBox, bottomColor);
+    this._renderBox(this.topBox, this.flipped ? 'w' : 'b');
+    this._renderBox(this.bottomBox, this.flipped ? 'b' : 'w');
   }
 
   _renderBox(boxEl, color) {
@@ -306,9 +231,7 @@ export class FischerClock {
     else if (isActive && isLow) boxEl.classList.add('low-time');
     else if (isActive) boxEl.classList.add('active');
 
-    const incHtml = this.preset.incSec > 0
-      ? `<span class="clock-inc-tag">+${this.preset.incSec}</span>`
-      : '';
+    const incHtml = this.preset.incSec > 0 ? `<span class="clock-inc-tag">+${this.preset.incSec}</span>` : '';
     boxEl.innerHTML = `${formatMs(ms)}${incHtml}`;
   }
 }
