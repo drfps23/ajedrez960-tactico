@@ -3,17 +3,20 @@ import { FIREBASE_CONFIG, isFirebaseConfigured } from './firebase_config.js';
 const FB_APP_URL = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 const FB_DB_URL  = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
+const MM_CLOCKS = [
+  { id: '3+2',  label: '⚡ 3+2 Blitz' },
+  { id: '5+3',  label: '🔥 5+3 Blitz' },
+  { id: '10+0', label: '⏱ 10 min' },
+  { id: '30+0', label: '👑 30 min' }
+];
+
 function esc(str) {
   return String(str ?? '')
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"');
+    .replace(/&/g, '&').replace(/</g, '<')
+    .replace(/>/g, '>').replace(/"/g, '"');
 }
 
-function cleanObj(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
+function cleanObj(obj) { return JSON.parse(JSON.stringify(obj)); }
 
 function getTabSessionId() {
   let id = sessionStorage.getItem('ajedrez960_tab_sid');
@@ -22,6 +25,10 @@ function getTabSessionId() {
     sessionStorage.setItem('ajedrez960_tab_sid', id);
   }
   return id;
+}
+
+function getSavedFlag() {
+  try { return localStorage.getItem('ajedrez960_flag_v1') || ''; } catch { return ''; }
 }
 
 function ensureMatchmakingStyles() {
@@ -36,11 +43,11 @@ function ensureMatchmakingStyles() {
     }
     .mm-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
     .mm-head h3 { font-size: 1.02rem; font-weight: 800; }
-    .mm-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .mm-controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
     .mm-chip {
       background: rgba(9, 13, 22, 0.72); color: var(--text-main);
       border: 1px solid var(--border-color); border-radius: 9px;
-      padding: 7px 11px; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+      padding: 7px 11px; font-size: 0.79rem; font-weight: 700; cursor: pointer;
     }
     .mm-chip.active { border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.18); color: var(--accent-cyan); }
     .mm-status {
@@ -54,14 +61,20 @@ function ensureMatchmakingStyles() {
       display: inline-block; width: 9px; height: 9px; border-radius: 50%;
       background: #4ade80; margin-right: 6px; animation: mmPulse 1.1s infinite;
     }
-    .mm-top-list {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-      gap: 8px; margin-top: 2px;
-    }
+    .mm-top-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; }
     .mm-rank-pill {
       background: rgba(9, 13, 22, 0.58); border: 1px solid var(--border-color);
       border-radius: 10px; padding: 7px 10px; font-size: 0.76rem;
       display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    }
+    .mm-hidden-during-global { display: none !important; }
+    .mm-live-banner {
+      border-color: rgba(34, 197, 94, 0.48) !important;
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.14), rgba(15, 23, 42, 0.92)) !important;
+    }
+    .mm-live-pill {
+      font-size: 0.75rem; font-weight: 800; color: #4ade80;
+      display: inline-flex; align-items: center;
     }
     @keyframes mmPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.4); } }
   `;
@@ -77,7 +90,7 @@ export function attachGlobalMatchmaking(app) {
   let serverOffset = 0;
 
   let selectedVariant = 'classic';
-  let selectedClock = '5+3';
+  let selectedClock = '10+0';
 
   let searching = false;
   let pairingBusy = false;
@@ -120,7 +133,6 @@ export function attachGlobalMatchmaking(app) {
           const db = dbMod.getDatabase(fbApp);
           fb = { db, mod: dbMod };
 
-          // Sincronizar desfase horario del dispositivo con el servidor de Firebase
           dbMod.onValue(dbMod.ref(db, '.info/serverTimeOffset'), (s) => {
             serverOffset = Number(s.val()) || 0;
           });
@@ -144,6 +156,7 @@ export function attachGlobalMatchmaking(app) {
         uid,
         name: prof.name || 'Jugador',
         avatar: prof.avatar || '♛',
+        flag: getSavedFlag(),
         classicElo: getMyElo('classic'),
         f960Elo: getMyElo('fischer960'),
         updatedAt: serverNow()
@@ -166,7 +179,45 @@ export function attachGlobalMatchmaking(app) {
     } catch { /* ignorar */ }
   };
 
-  // --- Puente directo con app.mp para heredar ELO, Reloj y Reacciones ---
+  const syncGlobalMatchBanner = (active) => {
+    const side = document.querySelector('.side-panel');
+    document.getElementById('global-match-banner')?.remove();
+    if (!side) return;
+    side.querySelectorAll('.mm-hidden-during-global').forEach(el => el.classList.remove('mm-hidden-during-global'));
+    if (!active || !activeMatch) return;
+
+    Array.from(side.children).forEach((el) => {
+      const txt = el.textContent || '';
+      if (txt.includes('Multijugador Online') || txt.includes('Arsenal de Ataque')) {
+        el.classList.add('mm-hidden-during-global');
+      }
+    });
+
+    const clkInfo = MM_CLOCKS.find(c => c.id === activeMatch.clock)?.label || activeMatch.clock;
+    const vText = activeMatch.variant === 'classic' ? '♟ Ajedrez Clásico' : '🎲 Fischer 960';
+    const banner = document.createElement('div');
+    banner.id = 'global-match-banner';
+    banner.className = 'card mm-live-banner';
+    banner.innerHTML = `
+      <div class="status-row">
+        <span class="mm-live-pill"><span class="mm-pulse"></span>Partida Global Activa</span>
+        <span class="turn-pill">${esc(clkInfo)}</span>
+      </div>
+      <p class="sec-sub" style="margin-top:6px">${vText} · Conectado vía Firebase Realtime</p>
+    `;
+    const statusCard = side.querySelector('.status-card');
+    if (statusCard) statusCard.insertAdjacentElement('afterend', banner);
+    else side.prepend(banner);
+  };
+
+  const leaveActiveMatch = () => {
+    if (!activeMatch) return;
+    try { activeMatch.unsubEvents?.(); } catch { /* ignorar */ }
+    activeMatch = null;
+    syncGlobalMatchBanner(false);
+  };
+
+  // Puente directo con app.mp
   if (app.mp) {
     const origIsConn = app.mp.isConnected.bind(app.mp);
     app.mp.isConnected = () => Boolean(activeMatch) || origIsConn();
@@ -212,10 +263,10 @@ export function attachGlobalMatchmaking(app) {
     };
   }
 
-  const leaveActiveMatch = () => {
-    if (!activeMatch) return;
-    try { activeMatch.unsubEvents?.(); } catch { /* ignorar */ }
-    activeMatch = null;
+  const origSetMode = app._setModeProgrammatically.bind(app);
+  app._setModeProgrammatically = (mode) => {
+    if (mode !== 'online') leaveActiveMatch();
+    return origSetMode(mode);
   };
 
   const enterMatch = async (matchId, myColor, matchData) => {
@@ -260,8 +311,9 @@ export function attachGlobalMatchmaking(app) {
     });
 
     app.shell.navigate('play');
-    app._setModeProgrammatically('online');
+    origSetMode('online');
     app._startOnlineMatch(matchData.positionId, myColor, matchData.clock);
+    syncGlobalMatchBanner(true);
     app.haptics?.pulse('heavy');
   };
 
@@ -298,10 +350,7 @@ export function attachGlobalMatchmaking(app) {
     };
 
     try {
-      // 1. Escribir la partida PRIMERO para que exista antes de notificar al rival
       await mod.set(mod.ref(db, `matches/${matchId}`), cleanObj(matchData));
-
-      // 2. Reclamar al rival con transacción segura (sin abortar en caché null)
       const candRef = mod.ref(db, `queue/${bucket}/${candidate.queueId}`);
       const tx = await mod.runTransaction(candRef, (cur) => {
         if (cur === null) return null;
@@ -330,7 +379,6 @@ export function attachGlobalMatchmaking(app) {
     const { db, mod } = fb;
     const entries = Object.values(queueObj || {});
 
-    // 1. Verificar si otro jugador ya nos emparejó
     const mine = queueObj?.[myQueueId];
     if (mine && mine.status === 'matched' && mine.matchId) {
       let mData = (await mod.get(mod.ref(db, `matches/${mine.matchId}`))).val();
@@ -347,24 +395,17 @@ export function attachGlobalMatchmaking(app) {
 
     if (pairingBusy) return;
 
-    // 2. Buscar rivales activos en la cola (ventana de 90s sincronizada con el servidor)
     const now = serverNow();
     const myElo = getMyElo(selectedVariant);
     const sec = Math.floor((Date.now() - searchStartedAt) / 1000);
     const maxDiff = sec < 8 ? 200 : sec < 16 ? 450 : 9999;
 
     const others = entries.filter(e =>
-      e &&
-      e.queueId &&
-      e.queueId !== myQueueId &&
-      e.status === 'waiting' &&
-      (now - (e.ts || 0)) < 90000 &&
-      Math.abs((e.elo || 1200) - myElo) <= maxDiff
+      e && e.queueId && e.queueId !== myQueueId && e.status === 'waiting' &&
+      (now - (e.ts || 0)) < 90000 && Math.abs((e.elo || 1200) - myElo) <= maxDiff
     );
-
     if (others.length === 0) return;
 
-    // Desempate determinista para evitar que ambos creen 2 partidas a la vez
     others.sort((a, b) => Math.abs((a.elo || 1200) - myElo) - Math.abs((b.elo || 1200) - myElo));
     const target = others[0];
     if (myQueueId > target.queueId || sec >= 3) {
@@ -403,7 +444,6 @@ export function attachGlobalMatchmaking(app) {
     });
     mod.onDisconnect(myQueueRef).remove().catch(() => {});
 
-    // Escuchar toda la cola en vivo: emparejamiento instantáneo al entrar un rival
     const bucketRef = mod.ref(db, `queue/${bucket}`);
     let latestQueue = {};
     unsubBucket = mod.onValue(bucketRef, (snap) => {
@@ -411,7 +451,6 @@ export function attachGlobalMatchmaking(app) {
       evaluateQueueSnapshot(bucket, latestQueue);
     });
 
-    // Latido de presencia y actualización de contador cada 2 segundos
     searchTimer = setInterval(() => {
       if (!searching) return;
       const sec = Math.floor((Date.now() - searchStartedAt) / 1000);
@@ -423,7 +462,6 @@ export function attachGlobalMatchmaking(app) {
           : `Buscando cualquier rival conectado en ${selectedClock}... ${sec}s`;
       updateMatchmakingWidgets();
 
-      // Mantener viva nuestra entrada en cola cada 10s
       if (sec > 0 && sec % 10 === 0 && myQueueRef) {
         mod.update(myQueueRef, { ts: serverNow() }).catch(() => {});
       }
@@ -437,6 +475,8 @@ export function attachGlobalMatchmaking(app) {
     syncCloudPlayer();
     return res;
   };
+
+  app.matchmaking = { syncCloudPlayer, refreshLeaderboard, isGlobalMatch: () => Boolean(activeMatch) };
 
   const buildWidgetHtml = () => {
     const configured = isFirebaseConfigured();
@@ -455,8 +495,9 @@ export function attachGlobalMatchmaking(app) {
       <div class="mm-controls">
         <button type="button" class="mm-chip ${selectedVariant === 'classic' ? 'active' : ''}" data-mm-var="classic">♟ Clásico</button>
         <button type="button" class="mm-chip ${selectedVariant === 'fischer960' ? 'active' : ''}" data-mm-var="fischer960">🎲 Fischer 960</button>
-        <button type="button" class="mm-chip ${selectedClock === '3+2' ? 'active' : ''}" data-mm-clk="3+2">⚡ 3+2 Blitz</button>
-        <button type="button" class="mm-chip ${selectedClock === '5+3' ? 'active' : ''}" data-mm-clk="5+3">⏱ 5+3 Rápida</button>
+        ${MM_CLOCKS.map(c => `
+          <button type="button" class="mm-chip ${selectedClock === c.id ? 'active' : ''}" data-mm-clk="${c.id}">${c.label}</button>
+        `).join('')}
       </div>
 
       <div class="mm-status ${statusMessage ? '' : 'hidden'}">
@@ -468,7 +509,7 @@ export function attachGlobalMatchmaking(app) {
         <div class="mm-top-list">
           ${topPlayers.map((p, idx) => `
             <div class="mm-rank-pill">
-              <span>#${idx + 1} ${esc(p.avatar || '♛')} ${esc(p.name)}</span>
+              <span>#${idx + 1} ${esc(p.avatar || '♛')} ${esc(p.name)} ${esc(p.flag || '')}</span>
               <strong style="color:var(--accent-cyan)">${p[eloField] || 1200}</strong>
             </div>
           `).join('')}
@@ -517,7 +558,5 @@ export function attachGlobalMatchmaking(app) {
     grid.insertAdjacentElement('beforebegin', card);
   };
 
-  if (isFirebaseConfigured()) {
-    ensureFirebase();
-  }
+  if (isFirebaseConfigured()) ensureFirebase();
 }
