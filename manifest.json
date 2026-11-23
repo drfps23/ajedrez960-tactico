@@ -1,0 +1,19 @@
+{
+  "name": "Ajedrez Táctico · Clásico y 960",
+  "short_name": "Ajedrez 960",
+  "description": "Ajedrez Clásico y Fischer 960 con combate animado, reloj Fischer, online y entrenador por voz.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
