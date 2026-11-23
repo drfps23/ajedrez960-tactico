@@ -1,275 +1,251 @@
 import { Chess960Engine, FILES } from './engine.js';
-import { SoundFX } from './audio.js';
 import { CombatFX } from './fx.js';
 import { THEMES } from './themes.js';
 
-const COMPLETED_KEY = 'ajedrez960_academy_done_v1';
-
-export const ACADEMY_CATEGORIES = [
-  { id: 'basics',   label: '🎓 Principiantes' },
-  { id: 'openings', label: '⚔️ Aperturas' },
-  { id: 'defenses', label: '🛡️ Defensas' },
-  { id: 'gambits',  label: '🔥 Gambitos' }
-];
+function toUci(from, to) {
+  return FILES[from.c] + (8 - from.r) + FILES[to.c] + (8 - to.r);
+}
 
 export const ACADEMY_LESSONS = [
-  // === PRINCIPIANTES ===
+  // === FUNDAMENTOS ===
   {
-    id: 'bas-center',
-    category: 'basics',
-    tier: 'free',
-    side: 'w',
+    id: 'bas-1',
+    category: 'fundamentos',
+    title: 'Reglas de Oro de la Apertura',
     positionId: 518,
-    title: 'Control del Centro y Enroque Rápido',
-    summary: 'Las 3 reglas de oro para empezar cualquier partida: ocupa el centro, desarrolla piezas menores y resguarda al Rey.',
+    flipped: false,
+    intro: 'Controla el centro, desarrolla Caballos y Alfiles rápido y protege a tu Rey con el enroque.',
     steps: [
-      { uci: 'e2e4', text: 'Peón a e4. Ocupa el centro de inmediato y abre paso a tu Dama y a tu Alfil.' },
-      { uci: 'e7e5', text: 'Las negras contestan luchando también por las casillas centrales.' },
-      { uci: 'g1f3', text: 'Caballo f3. Desarrolla atacando el peón enemigo de e5 y controla el centro.' },
-      { uci: 'b8c6', text: 'Las negras defienden su peón central sacando su propio Caballo.' },
-      { uci: 'f1c4', text: 'Alfil c4. Desarrolla apuntando directamente al punto más débil del rival: f7.' },
-      { uci: 'f8c5', text: 'Las negras copian el desarrollo activo con su Alfil.' },
-      { castle: 'K', text: 'Enroque corto. Resguardas al Rey y activas tu Torre hacia el centro en una sola jugada.' }
+      { uci: 'e2e4', text: 'Peón e 4. Toma el centro inmediatamente y abre diagonales para Dama y Alfil.' },
+      { uci: 'e7e5', text: 'Las negras luchan por el mismo espacio central.' },
+      { uci: 'g1f3', text: 'Caballo efe 3. Desarrolla una pieza menor atacando el peón central.' },
+      { uci: 'b8c6', text: 'Caballo ce 6 defiende el peón y controla las casillas centrales.' },
+      { uci: 'f1c4', text: 'Alfil ce 4. Apunta directo al punto más débil del rival: efe 7.' },
+      { uci: 'f8c5', text: 'Alfil ce 5. Las negras replican el desarrollo activo.' },
+      { uci: 'e1h1', text: 'Enroque corto. Resguardas al Rey y activas la Torre hacia el centro.' }
     ]
   },
   {
-    id: 'bas-960-castle',
-    category: 'basics',
-    tier: 'free',
-    side: 'w',
-    positionId: 14,
+    id: 'bas-2',
+    category: 'fundamentos',
     title: 'Cómo funciona el Enroque en Fischer 960',
-    summary: 'En Ajedrez 960 el Rey y las Torres comienzan en columnas distintas, pero siempre terminan en las casillas clásicas.',
+    positionId: 230,
+    flipped: false,
+    intro: 'En Fischer 960 el Rey y la Torre siempre terminan en las mismas casillas clásicas (g1/f1 o c1/d1), sin importar dónde empezaron.',
     steps: [
-      { uci: 'c1b3', text: 'En la posición 14, tu Torre está en d1 y tu Rey en e1. Primero despeja la casilla c1 moviendo el Caballo a b3.' },
-      { uci: 'c8b6', text: 'El rival hace lo mismo en su flanco de dama para liberar c8.' },
-      { castle: 'Q', text: 'Enroque largo 960. Tocas tu Rey y luego tu Torre en d1: el Rey salta a c1 y la Torre queda firme en d1.' },
-      { castle: 'Q', text: 'Ambos bandos quedan enrocados exactamente en las casillas clásicas aunque hayan partido de una formación 960.' }
-    ]
-  },
-  {
-    id: 'bas-pastor',
-    category: 'basics',
-    tier: 'free',
-    side: 'b',
-    positionId: 518,
-    title: 'Cómo defenderte del Mate Pastor',
-    summary: 'Aprende a castigar a los rivales que sacan la Dama demasiado pronto buscando mate en f7.',
-    steps: [
-      { uci: 'e2e4', text: 'Las blancas inician con e4.' },
-      { uci: 'e7e5', text: 'Responde sólido ocupando el centro con e5.' },
-      { uci: 'f1c4', text: 'El rival apunta a tu casilla f7 con el Alfil.' },
-      { uci: 'b8c6', text: 'Desarrolla tu Caballo a c6 protegiendo e5.' },
-      { uci: 'd1h5', text: 'Aquí viene la trampa del Mate Pastor: amenazan Dxf7 jaque mate.' },
-      { uci: 'g7g6', text: 'Jugada clave: peón a g6. Bloqueas el ataque sobre f7 y expulsas a la Dama enemiga.' },
-      { uci: 'h5f3', text: 'Si insisten en atacar f7 desde f3, ya estás listo para cerrar la puerta.' },
-      { uci: 'g8f6', text: 'Caballo f6. Bloqueas definitivamente la columna f, desarrollas una pieza y quedas con mejor posición.' }
+      { uci: 'd2d4', text: 'En la posición 230 la Torre blanca empieza en be 1. Abrimos el centro.' },
+      { uci: 'd7d5', text: 'Las negras ocupan el centro con peón de 5.' },
+      { uci: 'c1f4', text: 'Desarrollamos el Alfil para despejar la primera fila.' },
+      { uci: 'c8f5', text: 'Las negras imitan el desarrollo.' },
+      { uci: 'd1d2', text: 'Movemos la Dama para dejar libres las casillas ce 1 y de 1.' },
+      { uci: 'd8d7', text: 'Las negras preparan su propio enroque largo.' },
+      { uci: 'e1b1', text: 'Enroque largo 960. Tocando el Rey y luego la Torre de be 1, el Rey aterriza en ce 1 y la Torre en de 1.' }
     ]
   },
 
   // === APERTURAS ===
   {
-    id: 'op-italian',
-    category: 'openings',
-    tier: 'free',
-    side: 'w',
+    id: 'ap-1',
+    category: 'aperturas',
+    title: 'Apertura Italiana',
     positionId: 518,
-    title: 'Apertura Italiana (Giuoco Piano)',
-    summary: 'Una de las aperturas más clásicas y agresivas: desarrollo rápido, presión sobre f7 y ruptura central con d4.',
+    flipped: false,
+    intro: 'Una de las aperturas más clásicas y agresivas: busca ataque directo sobre f7 y ruptura central rápida.',
     steps: [
-      { uci: 'e2e4', text: 'Peón a e4, abriendo diagonales para tu Alfil y Dama.' },
-      { uci: 'e7e5', text: 'Respuesta simétrica de las negras.' },
-      { uci: 'g1f3', text: 'Caballo f3 presiona e5 y prepara el enroque.' },
-      { uci: 'b8c6', text: 'Las negras defienden el centro con Cc6.' },
-      { uci: 'f1c4', text: 'Alfil c4 define la Apertura Italiana, apuntando a f7.' },
-      { uci: 'f8c5', text: 'Las negras responden con Ac5.' },
-      { uci: 'c2c3', text: 'Peón a c3 prepara el golpe central d4 con apoyo.' },
-      { uci: 'g8f6', text: 'El rival ataca tu peón de e4 con Cf6.' },
-      { uci: 'd2d4', text: 'Ruptura d4. Tomas la iniciativa, abres líneas y dominas el centro.' }
+      { uci: 'e2e4', text: 'Peón e 4, apertura abierta clásica.' },
+      { uci: 'e7e5', text: 'Respuesta simétrica en el centro.' },
+      { uci: 'g1f3', text: 'Caballo efe 3 desarrolla con ganancia de tiempo.' },
+      { uci: 'b8c6', text: 'Caballo ce 6 defiende e 5.' },
+      { uci: 'f1c4', text: 'Alfil ce 4 define la Apertura Italiana, presionando efe 7.' },
+      { uci: 'f8c5', text: 'Alfil ce 5 completa el Giuoco Piano.' },
+      { uci: 'c2c3', text: 'Peón ce 3 prepara el avance central de 4 con apoyo.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 contraataca el peón de e 4.' },
+      { uci: 'd2d4', text: 'Ruptura central de 4 abriendo líneas para todas las piezas blancas.' },
+      { uci: 'e5d4', text: 'Las negras capturan para aliviar la tensión.' },
+      { uci: 'c3d4', text: 'Recuperas con un centro poderoso y ventaja de espacio.' }
     ]
   },
   {
-    id: 'op-ruy',
-    category: 'openings',
-    tier: 'pro',
-    side: 'w',
-    positionId: 518,
+    id: 'ap-2',
+    category: 'aperturas',
     title: 'Apertura Española (Ruy López)',
-    summary: 'La favorita de los Campeones Mundiales: ejerce presión duradera sobre el Caballo que defiende el centro negro.',
+    positionId: 518,
+    flipped: false,
+    intro: 'Favorita de los Campeones Mundiales: presiona al defensor del peón central para lograr ventaja estratégica duradera.',
     steps: [
-      { uci: 'e2e4', text: 'Peón a e4.' },
-      { uci: 'e7e5', text: 'Las negras responden e5.' },
-      { uci: 'g1f3', text: 'Caballo f3 ataca el peón de e5.' },
-      { uci: 'b8c6', text: 'Las negras defienden con Cc6.' },
-      { uci: 'f1b5', text: 'Alfil b5: la Apertura Española. Presionas directamente al defensor de e5.' },
-      { uci: 'a7a6', text: 'Defensa Morphy: las negras preguntan al Alfil sus intenciones.' },
-      { uci: 'b5a4', text: 'Alfil a4 mantiene la tensión en la diagonal sin ceder la pareja de alfiles.' },
-      { uci: 'g8f6', text: 'Las negras contraatacan sobre e4.' },
-      { castle: 'K', text: 'Enroque corto. Dejas al Rey seguro y preparas Te1 para defender e4 y dominar el centro.' }
+      { uci: 'e2e4', text: 'Peón e 4 domina el centro.' },
+      { uci: 'e7e5', text: 'Peón e 5 responde.' },
+      { uci: 'g1f3', text: 'Caballo efe 3 ataca e 5.' },
+      { uci: 'b8c6', text: 'Caballo ce 6 protege el peón.' },
+      { uci: 'f1b5', text: 'Alfil be 5 define la Española, presionando indirectamente el centro.' },
+      { uci: 'a7a6', text: 'Peón a 6 cuestiona de inmediato al Alfil blanco.' },
+      { uci: 'b5a4', text: 'El Alfil retrocede manteniendo la presión sobre la diagonal.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 desarrolla y ataca e 4.' },
+      { uci: 'e1h1', text: 'Enroque corto. El peón de e 4 queda protegido tácticamente por la futura Torre en e 1.' }
     ]
   },
   {
-    id: 'op-london',
-    category: 'openings',
-    tier: 'pro',
-    side: 'w',
-    positionId: 518,
+    id: 'ap-3',
+    category: 'aperturas',
     title: 'Sistema Londres',
-    summary: 'Sistema sólido y fácil de aprender contra casi cualquier respuesta negra, formando una pirámide de peones.',
+    positionId: 518,
+    flipped: false,
+    intro: 'Esquema sólido y universal con Blancas: fácil de recordar y muy difícil de refutar.',
     steps: [
-      { uci: 'd2d4', text: 'Peón a d4 para controlar el centro con solidez.' },
-      { uci: 'd7d5', text: 'Las negras replican con d5.' },
-      { uci: 'c1f4', text: 'Alfil f4 define el Sistema Londres: sacas el Alfil antes de cerrar la diagonal con e3.' },
-      { uci: 'g8f6', text: 'Las negras desarrollan su Caballo.' },
-      { uci: 'e2e3', text: 'Peón a e3 refuerza d4 y abre paso al Alfil de casillas claras.' },
-      { uci: 'e7e6', text: 'Las negras consolidan su centro.' },
-      { uci: 'g1f3', text: 'Caballo f3 toma control de la casilla estratégica e5.' },
-      { uci: 'f8d6', text: 'El rival ofrece el cambio de tu Alfil de f4.' },
-      { uci: 'f4g3', text: 'Alfil g3: si cambian en g3, recapturas con el peón de h y abres la columna h para tu Torre.' }
+      { uci: 'd2d4', text: 'Peón de 4 controla las casillas centrales oscuras.' },
+      { uci: 'd7d5', text: 'Las negras contestan en el centro.' },
+      { uci: 'c1f4', text: 'Alfil efe 4 sale antes de cerrar la cadena de peones.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 desarrolla hacia el centro.' },
+      { uci: 'e2e3', text: 'Peón e 3 consolida el triángulo central.' },
+      { uci: 'e7e6', text: 'Las negras abren su Alfil de casillas oscuras.' },
+      { uci: 'g1f3', text: 'Caballo efe 3 controla la casilla clave e 5.' },
+      { uci: 'f8d6', text: 'Alfil de 6 ofrece el cambio del Alfil blanco.' },
+      { uci: 'f4g3', text: 'Retrocedes a ge 3: si capturan, abres la columna hache para tu Torre.' }
     ]
   },
 
   // === DEFENSAS ===
   {
-    id: 'def-sicilian',
-    category: 'defenses',
-    tier: 'free',
-    side: 'b',
+    id: 'def-1',
+    category: 'defensas',
+    title: 'Defensa Siciliana (Najdorf)',
     positionId: 518,
-    title: 'Defensa Siciliana (Variante Najdorf)',
-    summary: 'La respuesta más combativa contra e4: lucha asimétrica por el centro y contragolpe feroz en el flanco de dama.',
+    flipped: true,
+    intro: 'La defensa más combativa con Negras contra e4: rompe la simetría y busca contrajuego en el flanco de Dama.',
     steps: [
-      { uci: 'e2e4', text: 'Las blancas abren con e4.' },
-      { uci: 'c7c5', text: 'Peón a c5: la Defensa Siciliana. Impides d4 cómodo y buscas desequilibrio desde la jugada uno.' },
-      { uci: 'g1f3', text: 'Las blancas preparan la ruptura d4.' },
-      { uci: 'd7d6', text: 'Peón a d6 controla e5 y abre la diagonal de tu Alfil de c8.' },
+      { uci: 'e2e4', text: 'Las blancas inician con e 4.' },
+      { uci: 'c7c5', text: 'Peón ce 5 plantea la Defensa Siciliana, luchando por de 4 con un peón lateral.' },
+      { uci: 'g1f3', text: 'Caballo efe 3 prepara la ruptura central.' },
+      { uci: 'd7d6', text: 'Peón de 6 controla e 5 y prepara desarrollo flexible.' },
       { uci: 'd2d4', text: 'Las blancas abren el centro.' },
-      { uci: 'c5d4', text: 'Capturas en d4: cambias un peón lateral por un peón central blanco.' },
-      { uci: 'f3d4', text: 'Las blancas retoman de Caballo.' },
-      { uci: 'g8f6', text: 'Caballo f6 desarrolla atacando inmediatamente el peón de e4.' },
-      { uci: 'b1c3', text: 'Las blancas defienden e4.' },
-      { uci: 'a7a6', text: 'Peón a a6: la famosa Variante Najdorf. Evitas saltos molestos a b5 y preparas expansión con b5 o e5.' }
+      { uci: 'c5d4', text: 'Cambias peón lateral por peón central, quedando con mayoría en el centro.' },
+      { uci: 'f3d4', text: 'El Caballo blanco retoma en el centro.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 ataca el peón de e 4.' },
+      { uci: 'b1c3', text: 'Caballo ce 3 defiende e 4.' },
+      { uci: 'a7a6', text: 'Peón a 6 define la variante Najdorf, evitando saltos rivales a be 5.' }
     ]
   },
   {
-    id: 'def-french',
-    category: 'defenses',
-    tier: 'pro',
-    side: 'b',
+    id: 'def-2',
+    category: 'defensas',
+    title: 'Defensa Francesa',
     positionId: 518,
-    title: 'Defensa Francesa (Winawer)',
-    summary: 'Estructura rocosa que invita a las blancas a avanzar en el centro para luego minar su cadena de peones con c5.',
+    flipped: true,
+    intro: 'Estructura sólida con Negras diseñada para contraatacar la cadena central blanca.',
     steps: [
-      { uci: 'e2e4', text: 'Las blancas juegan e4.' },
-      { uci: 'e7e6', text: 'Peón a e6 prepara un contragolpe inmediato con d5.' },
-      { uci: 'd2d4', text: 'Las blancas construyen el centro completo.' },
-      { uci: 'd7d5', text: 'Peón a d5 reta de frente al peón blanco de e4.' },
-      { uci: 'b1c3', text: 'Las blancas defienden e4 desarrollando.' },
-      { uci: 'f8b4', text: 'Alfil b4 clava al Caballo y renueva la amenaza sobre e4.' },
-      { uci: 'e4e5', text: 'Las blancas ganan espacio cerrando el centro.' },
-      { uci: 'c7c5', text: 'Ruptura temática c5: atacas la base de la cadena blanca en d4.' }
+      { uci: 'e2e4', text: 'Las blancas abren con e 4.' },
+      { uci: 'e7e6', text: 'Peón e 6 prepara el golpe central de 5 con respaldo.' },
+      { uci: 'd2d4', text: 'Las blancas toman el centro completo.' },
+      { uci: 'd7d5', text: 'Peón de 5 desafía de inmediato al peón blanco de e 4.' },
+      { uci: 'b1c3', text: 'Caballo ce 3 defiende el centro.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 presiona todavía más sobre e 4.' },
+      { uci: 'e4e5', text: 'Las blancas ganan espacio avanzando.' },
+      { uci: 'f6d7', text: 'El Caballo se reagrupa preparando la ruptura típica con ce 5.' }
     ]
   },
   {
-    id: 'def-carokann',
-    category: 'defenses',
-    tier: 'pro',
-    side: 'b',
-    positionId: 518,
+    id: 'def-3',
+    category: 'defensas',
     title: 'Defensa Caro-Kann',
-    summary: 'Ultra sólida como la Francesa, pero manteniendo libre la diagonal de tu Alfil de casillas claras.',
+    positionId: 518,
+    flipped: true,
+    intro: 'Defensa sumamente sólida que permite activar el Alfil de casillas claras sin quedar encerrado.',
     steps: [
-      { uci: 'e2e4', text: 'Las blancas abren con e4.' },
-      { uci: 'c7c6', text: 'Peón a c6 prepara d5 sin encerrar tu Alfil de c8.' },
+      { uci: 'e2e4', text: 'Las blancas juegan e 4.' },
+      { uci: 'c7c6', text: 'Peón ce 6 define la Caro-Kann preparando de 5.' },
       { uci: 'd2d4', text: 'Las blancas ocupan el centro.' },
-      { uci: 'd7d5', text: 'Golpeas en el centro con d5.' },
-      { uci: 'b1c3', text: 'Las blancas defienden e4.' },
-      { uci: 'd5e4', text: 'Capturas en e4 para simplificar el centro.' },
-      { uci: 'c3e4', text: 'Las blancas centralizan su Caballo.' },
-      { uci: 'c8f5', text: 'Alfil f5: desarrollas tu Alfil fuera de la cadena de peones con ganancia de tiempo.' }
+      { uci: 'd7d5', text: 'Golpe central inmediato en de 5.' },
+      { uci: 'b1c3', text: 'Caballo ce 3 defiende e 4.' },
+      { uci: 'd5e4', text: 'Liquidas la tensión en el centro.' },
+      { uci: 'c3e4', text: 'El Caballo blanco centraliza.' },
+      { uci: 'c8f5', text: 'Alfil efe 5 sale activamente atacando al Caballo antes de cerrar con e 6.' }
     ]
   },
   {
-    id: 'def-kid',
-    category: 'defenses',
-    tier: 'pro',
-    side: 'b',
-    positionId: 518,
+    id: 'def-4',
+    category: 'defensas',
     title: 'Defensa India de Rey',
-    summary: 'Estilo hipermoderno: cedes el centro al inicio, fianchetas tu Alfil en g7 y lanzas un ataque explosivo al Rey blanco.',
+    positionId: 518,
+    flipped: true,
+    intro: 'Defensa hipermoderna: dejas que el rival ocupe el centro para destruirlo después con un fianchetto fulminante.',
     steps: [
-      { uci: 'd2d4', text: 'Las blancas abren con d4.' },
-      { uci: 'g8f6', text: 'Caballo f6 evita que las blancas jueguen e4 de inmediato.' },
-      { uci: 'c2c4', text: 'Las blancas expanden su centro.' },
-      { uci: 'g7g6', text: 'Peón a g6 prepara el poderoso Alfil en fianchetto en g7.' },
-      { uci: 'b1c3', text: 'Las blancas se preparan para e4.' },
-      { uci: 'f8g7', text: 'Alfil g7: el corazón de la India de Rey, dominando toda la gran diagonal oscura.' },
-      { uci: 'e2e4', text: 'Las blancas forman un centro amplio.' },
-      { uci: 'd7d6', text: 'Peón a d6 frena e5 y prepara futuras rupturas con e5 o c5.' },
-      { uci: 'g1f3', text: 'Las blancas completan su desarrollo.' },
-      { castle: 'K', text: 'Enroque corto. Tu Rey está seguro y ahora preparas e5 para iniciar el contragolpe.' }
+      { uci: 'd2d4', text: 'Las blancas abren con de 4.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 impide e 4 inmediato.' },
+      { uci: 'c2c4', text: 'Peón ce 4 gana espacio.' },
+      { uci: 'g7g6', text: 'Peón ge 6 prepara el fianchetto del Alfil negro.' },
+      { uci: 'b1c3', text: 'Caballo ce 3 apoya el avance e 4.' },
+      { uci: 'f8g7', text: 'El Alfil en ge 7 domina toda la gran diagonal oscura.' },
+      { uci: 'e2e4', text: 'Las blancas construyen un gran centro.' },
+      { uci: 'd7d6', text: 'Peón de 6 frena e 5 y prepara el contragolpe.' },
+      { uci: 'g1f3', text: 'Desarrollo natural blanco.' },
+      { uci: 'e8h8', text: 'Enroque corto rápido; ahora las negras atacarán con e 5 o ce 5.' }
     ]
   },
 
   // === GAMBITOS ===
   {
-    id: 'gam-queen',
-    category: 'gambits',
-    tier: 'free',
-    side: 'w',
-    positionId: 518,
+    id: 'gam-1',
+    category: 'gambitos',
     title: 'Gambito de Dama',
-    summary: 'Ofreces el peón lateral de c4 para desviar al peón central negro y adueñarte del tablero.',
+    positionId: 518,
+    flipped: false,
+    intro: 'El gambito más respetado del ajedrez: ofreces un peón lateral para desviar al peón central negro.',
     steps: [
-      { uci: 'd2d4', text: 'Peón a d4.' },
-      { uci: 'd7d5', text: 'Las negras igualan en el centro.' },
-      { uci: 'c2c4', text: 'Peón a c4: el Gambito de Dama. Ofreces el peón lateral para desestabilizar d5.' },
-      { uci: 'd5c4', text: 'Si las negras aceptan el gambito, abandonan el centro.' },
-      { uci: 'e2e3', text: 'Peón a e3 abre tu Alfil para recuperar el peón de c4 cómodamente.' },
-      { uci: 'b7b5', text: 'Si el rival intenta aferrarse al peón extra con b5, cae en problemas.' },
-      { uci: 'a2a4', text: 'Golpe a4: destruyes su cadena de peones del flanco de dama y recuperas el material con ventaja.' }
+      { uci: 'd2d4', text: 'Peón de 4 ocupa el centro.' },
+      { uci: 'd7d5', text: 'Las negras igualan el espacio central.' },
+      { uci: 'c2c4', text: 'Peón ce 4 plantea el Gambito de Dama, atacando de 5.' },
+      { uci: 'e7e6', text: 'Gambito de Dama Declinado: las negras mantienen su centro firme.' },
+      { uci: 'b1c3', text: 'Caballo ce 3 aumenta la presión sobre de 5.' },
+      { uci: 'g8f6', text: 'Caballo efe 6 refuerza el centro negro.' },
+      { uci: 'c1g5', text: 'Alfil ge 5 clava al Caballo, intensificando la presión.' },
+      { uci: 'f8e7', text: 'Alfil e 7 rompe la clavada y prepara el enroque.' }
     ]
   },
   {
-    id: 'gam-king',
-    category: 'gambits',
-    tier: 'pro',
-    side: 'w',
-    positionId: 518,
+    id: 'gam-2',
+    category: 'gambitos',
     title: 'Gambito de Rey',
-    summary: 'Espíritu romántico puro: sacrificas el peón de f4 para abrir la columna f y lanzar un ataque relámpago.',
+    positionId: 518,
+    flipped: false,
+    intro: 'Sacrificio romántico y explosivo para abrir la columna f y lanzar un ataque directo al Rey.',
     steps: [
-      { uci: 'e2e4', text: 'Peón a e4.' },
-      { uci: 'e7e5', text: 'Las negras contestan e5.' },
-      { uci: 'f2f4', text: 'Peón a f4: el Gambito de Rey. Atacas e5 y buscas abrir la columna f para tu Torre.' },
-      { uci: 'e5f4', text: 'Las negras aceptan el peón.' },
-      { uci: 'g1f3', text: 'Caballo f3 evita el molesto jaque de Dama en h4.' },
-      { uci: 'g7g5', text: 'Las negras intentan sostener su peón de ventaja.' },
-      { uci: 'f1c4', text: 'Alfil c4 apunta a f7, preparando el enroque rápido y un ataque explosivo sobre la columna f.' }
+      { uci: 'e2e4', text: 'Peón e 4 inicia la lucha.' },
+      { uci: 'e7e5', text: 'Las negras responden e 5.' },
+      { uci: 'f2f4', text: 'Peón efe 4 lanza el Gambito de Rey, sacrificando un peón por ataque.' },
+      { uci: 'e5f4', text: 'Las negras aceptan el gambito.' },
+      { uci: 'g1f3', text: 'Caballo efe 3 impide el jaque de Dama en hache 4.' },
+      { uci: 'g7g5', text: 'Las negras intentan sostener el peón extra.' },
+      { uci: 'f1c4', text: 'Alfil ce 4 apunta a efe 7 con desarrollo relámpago.' }
     ]
   },
   {
-    id: 'gam-evans',
-    category: 'gambits',
-    tier: 'pro',
-    side: 'w',
-    positionId: 518,
+    id: 'gam-3',
+    category: 'gambitos',
     title: 'Gambito Evans',
-    summary: 'Sacrificio táctico dentro de la Italiana para ganar tiempos de desarrollo y construir un centro imparable.',
+    positionId: 518,
+    flipped: false,
+    intro: 'Sacrificio táctico dentro de la Italiana para ganar tiempos de desarrollo y apoderarte del centro.',
     steps: [
-      { uci: 'e2e4', text: 'Peón a e4.' },
-      { uci: 'e7e5', text: 'Respuesta e5.' },
-      { uci: 'g1f3', text: 'Caballo f3.' },
-      { uci: 'b8c6', text: 'Caballo c6.' },
-      { uci: 'f1c4', text: 'Alfil c4.' },
-      { uci: 'f8c5', text: 'Alfil c5.' },
-      { uci: 'b2b4', text: '¡Gambito Evans! Sacrificas el peón de b4 para desviar al Alfil negro y ganar velocidad.' },
-      { uci: 'c5b4', text: 'Las negras capturan en b4.' },
-      { uci: 'c2c3', text: 'Peón a c3 gana un tiempo atacando al Alfil y prepara d4.' },
-      { uci: 'b4a5', text: 'El Alfil negro se retira a a5.' },
-      { uci: 'd2d4', text: 'Peón a d4: consigues un centro dominante y ventaja de desarrollo a cambio de un solo peón.' }
+      { uci: 'e2e4', text: 'Peón e 4.' },
+      { uci: 'e7e5', text: 'Peón e 5.' },
+      { uci: 'g1f3', text: 'Caballo efe 3.' },
+      { uci: 'b8c6', text: 'Caballo ce 6.' },
+      { uci: 'f1c4', text: 'Alfil ce 4.' },
+      { uci: 'f8c5', text: 'Alfil ce 5.' },
+      { uci: 'b2b4', text: 'Peón be 4, el famoso Gambito Evans: desvías al Alfil negro ganando iniciativa.' },
+      { uci: 'c5b4', text: 'El Alfil negro captura el peón.' },
+      { uci: 'c2c3', text: 'Peón ce 3 ataca al Alfil y prepara de 4.' },
+      { uci: 'b4a5', text: 'El Alfil retrocede.' },
+      { uci: 'd2d4', text: 'Golpe central de 4 con ataque fulminante y líneas abiertas.' }
     ]
   }
+];
+
+const CATEGORIES = [
+  { id: 'fundamentos', label: '📘 Principiantes' },
+  { id: 'aperturas',   label: '⚔️ Aperturas' },
+  { id: 'defensas',    label: '🛡️ Defensas' },
+  { id: 'gambitos',    label: '🔥 Gambitos' }
 ];
 
 function ensureAcademyStyles() {
@@ -277,485 +253,266 @@ function ensureAcademyStyles() {
   const style = document.createElement('style');
   style.dataset.academyCss = 'true';
   style.textContent = `
-    .ac-studio {
+    .ac-layout {
       display: grid;
-      grid-template-columns: minmax(290px, 560px) minmax(270px, 1fr);
+      grid-template-columns: minmax(280px, 520px) minmax(260px, 1fr);
       gap: 20px;
       align-items: start;
     }
-    .ac-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .ac-mode-switch {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-    }
-    .ac-step-box {
-      background: rgba(9, 13, 22, 0.65);
+    .ac-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ac-note {
+      background: rgba(9, 13, 22, 0.68);
       border: 1px solid var(--border-color);
       border-left: 4px solid var(--accent-cyan);
       border-radius: 10px;
       padding: 12px;
-      font-size: 0.85rem;
+      font-size: 0.86rem;
       line-height: 1.5;
-      color: var(--text-main);
+      min-height: 76px;
     }
-    .ac-step-box.ok {
-      border-left-color: #22c55e;
-      background: rgba(34, 197, 94, 0.12);
+    .ac-controls {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
     }
-    .ac-step-box.err {
-      border-left-color: #f43f5e;
-      background: rgba(244, 63, 94, 0.14);
-    }
-    .ac-line-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.76rem;
-    }
-    .ac-move-pill {
-      padding: 2px 7px;
-      border-radius: 6px;
-      background: rgba(15, 23, 42, 0.7);
+    .ac-list { display: flex; flex-direction: column; gap: 7px; }
+    .ac-item {
+      background: var(--bg-card);
       border: 1px solid var(--border-color);
-      color: var(--text-muted);
-    }
-    .ac-move-pill.done {
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
       color: var(--text-main);
-      border-color: rgba(56, 189, 248, 0.45);
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    .ac-move-pill.now {
-      background: rgba(56, 189, 248, 0.22);
-      color: var(--accent-cyan);
+    .ac-item:hover, .ac-item.active {
       border-color: var(--accent-cyan);
-      font-weight: 800;
+      background: rgba(56, 189, 248, 0.14);
     }
-    @media (max-width: 880px) {
-      .ac-studio { grid-template-columns: 1fr; }
+    @media (max-width: 860px) {
+      .ac-layout { grid-template-columns: 1fr; }
     }
   `;
   document.head.appendChild(style);
 }
 
-function speakSpanish(text, enabled) {
-  if (!enabled || !text || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-  try {
-    window.speechSynthesis.cancel();
-    const voices = window.speechSynthesis.getVoices() || [];
-    const es = voices.filter(v => (v.lang || '').toLowerCase().startsWith('es'));
-    const best = es.find(v => /natural|online|google|neural/i.test(v.name)) || es[0] || null;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = best?.lang || 'es-ES';
-    if (best) u.voice = best;
-    u.rate = 1.03;
-    setTimeout(() => window.speechSynthesis.speak(u), 40);
-  } catch { /* ignorar */ }
-}
-
-function stopSpeech() {
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    try { window.speechSynthesis.cancel(); } catch { /* ignorar */ }
-  }
-}
-
-function resolveStepMove(engine, step) {
-  const legal = engine.getLegalMoves(engine.turn);
-  if (step.castle) {
-    return legal.find(m => m.castle === step.castle) || null;
-  }
-  const f = { r: 8 - parseInt(step.uci[1], 10), c: FILES.indexOf(step.uci[0]) };
-  const t = { r: 8 - parseInt(step.uci[3], 10), c: FILES.indexOf(step.uci[2]) };
-  return legal.find(m => m.from.r === f.r && m.from.c === f.c && m.to.r === t.r && m.to.c === t.c) || null;
-}
-
 export class AcademyView {
-  constructor({ rootEl, store, getCurrentThemeId, onBackHome, onOpenSubscription }) {
+  constructor({ container, sound, getThemeId, onBack }) {
     ensureAcademyStyles();
-    this.rootEl = rootEl;
-    this.store = store;
-    this.getCurrentThemeId = getCurrentThemeId;
-    this.onBackHome = onBackHome;
-    this.onOpenSubscription = onOpenSubscription;
+    this.container = container;
+    this.sound = sound;
+    this.getThemeId = getThemeId;
+    this.onBack = onBack;
 
-    this.sound = new SoundFX();
-    this.category = 'basics';
-    this.completed = this._loadCompleted();
-    this.voiceOn = true;
-
-    this.activeLesson = null;
-    this.practiceMode = false;
-    this.engine = null;
-    this.fx = null;
+    this.category = 'aperturas';
+    this.lesson = ACADEMY_LESSONS.find(l => l.category === this.category) || ACADEMY_LESSONS[0];
     this.stepIdx = 0;
-    this.playedSans = [];
-    this.selected = null;
-    this.legalForSelected = [];
+    this.voiceOn = true;
     this.hiddenSquares = new Set();
-    this.isAnimating = false;
-    this.customFeedback = null;
-    this._animToken = 0;
-  }
+    this._token = 0;
+    this.engine = new Chess960Engine(518);
+    this.fx = null;
 
-  _loadCompleted() {
-    try {
-      const raw = localStorage.getItem(COMPLETED_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return new Set(Array.isArray(arr) ? arr : []);
-    } catch {
-      return new Set();
-    }
-  }
-
-  _saveCompleted() {
-    try {
-      localStorage.setItem(COMPLETED_KEY, JSON.stringify([...this.completed]));
-    } catch { /* ignorar */ }
-  }
-
-  _theme() {
-    const id = this.getCurrentThemeId ? this.getCurrentThemeId() : 'neon';
-    return THEMES[id] || THEMES.neon;
+    this._mountLayout();
+    this.loadLesson(this.lesson);
   }
 
   destroy() {
-    this._animToken++;
-    stopSpeech();
-    if (this.fx) this.fx.cancelActive();
-    this.fx = null;
+    this._token++;
+    this.fx?.cancelActive();
+    this._stopSpeech();
   }
 
-  render() {
-    if (this.activeLesson) {
-      this._renderStudioShell();
-    } else {
-      this._renderCatalog();
-    }
+  _getTheme() {
+    const id = this.getThemeId?.() || 'neon';
+    return THEMES[id] || THEMES.neon;
   }
 
-  _renderCatalog() {
-    this.destroy();
-    const hasPro = this.store.hasAccess('pro_academy');
-    const lessons = ACADEMY_LESSONS.filter(l => l.category === this.category);
+  _stopSpeech() {
+    try { window.speechSynthesis?.cancel(); } catch { /* ignorar */ }
+  }
 
-    this.rootEl.innerHTML = `
+  _speak(text) {
+    if (!this.voiceOn || !text || !('speechSynthesis' in window)) return;
+    this._stopSpeech();
+    setTimeout(() => {
+      const u = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices() || [];
+      const es = voices.find(v => /natural|google|online/i.test(v.name) && (v.lang || '').toLowerCase().startsWith('es'))
+        || voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
+      if (es) u.voice = es;
+      u.lang = es?.lang || 'es-ES';
+      u.rate = 1.04;
+      try { window.speechSynthesis.speak(u); } catch { /* ignorar */ }
+    }, 45);
+  }
+
+  _mountLayout() {
+    this.container.innerHTML = `
       <div class="sec-head">
         <div>
-          <h2>🎓 Academia (${this.completed.size}/${ACADEMY_LESSONS.length} completadas)</h2>
-          <p class="sec-sub">Aprende fundamentos, Aperturas, Defensas y Gambitos paso a paso con voz y práctica interactiva.</p>
+          <h2>🎓 Academia: Aprender, Aperturas, Defensas y Gambitos</h2>
+          <p class="sec-sub">Explora los planes clave jugada por jugada con animaciones y explicación hablada.</p>
         </div>
-        <button class="btn btn-secondary" id="ac-back-home">← Volver al Inicio</button>
+        <button id="ac-back" class="btn btn-secondary">← Volver al Inicio</button>
       </div>
 
-      <div class="pz-tabs">
-        ${ACADEMY_CATEGORIES.map(cat => `
-          <button class="pz-tab ${this.category === cat.id ? 'active' : ''}" data-cat="${cat.id}">${cat.label}</button>
+      <div class="ac-tabs">
+        ${CATEGORIES.map(c => `
+          <button class="btn ${c.id === this.category ? 'btn-primary' : 'btn-secondary'}" data-ac-cat="${c.id}">${c.label}</button>
         `).join('')}
       </div>
 
-      <div class="pz-grid">
-        ${lessons.map(l => {
-          const done = this.completed.has(l.id);
-          const locked = l.tier === 'pro' && !hasPro;
-          return `
-            <button class="pz-card ${done ? 'solved' : ''}" data-open-lesson="${l.id}" data-locked="${locked}">
-              <div class="pz-card-top">
-                <span class="curr-pill">${l.side === 'w' ? '⚪ Blancas' : '⚫ Negras'} · ${l.steps.length} jugadas</span>
-                <span class="mode-card-tag ${locked ? 'soon' : ''}">
-                  ${locked ? '🔒 PRO' : (done ? '✓ COMPLETADA' : 'ESTUDIAR')}
-                </span>
-              </div>
-              <h3 style="font-size:0.98rem">${l.title}</h3>
-              <p class="sec-sub">${l.summary}</p>
-            </button>
-          `;
-        }).join('')}
-      </div>
-    `;
-
-    this.rootEl.querySelector('#ac-back-home')?.addEventListener('click', () => this.onBackHome());
-    this.rootEl.querySelectorAll('.pz-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.category = btn.dataset.cat;
-        this._renderCatalog();
-      });
-    });
-    this.rootEl.querySelectorAll('[data-open-lesson]').forEach(card => {
-      card.addEventListener('click', () => {
-        if (card.dataset.locked === 'true') {
-          this.onOpenSubscription();
-          return;
-        }
-        const lesson = ACADEMY_LESSONS.find(x => x.id === card.dataset.openLesson);
-        if (lesson) this.openLesson(lesson, false);
-      });
-    });
-  }
-
-  openLesson(lesson, practiceMode = false) {
-    this.destroy();
-    this.activeLesson = lesson;
-    this.practiceMode = practiceMode;
-    this.flipped = lesson.side === 'b';
-    this.engine = new Chess960Engine(lesson.positionId);
-    this.stepIdx = 0;
-    this.playedSans = [];
-    this.selected = null;
-    this.legalForSelected = [];
-    this.hiddenSquares.clear();
-    this.isAnimating = false;
-    this.customFeedback = null;
-
-    this._renderStudioShell();
-    speakSpanish(`${lesson.title}.${lesson.summary}`, this.voiceOn);
-
-    // En modo práctica, si el usuario juega con Negras, ejecutar automáticamente la jugada 1 de Blancas
-    if (this.practiceMode && this.engine.turn !== this.activeLesson.side) {
-      this._scheduleOpponentPracticeMove();
-    }
-  }
-
-  _renderStudioShell() {
-    const l = this.activeLesson;
-    const theme = this._theme();
-
-    this.rootEl.innerHTML = `
-      <div class="sec-head">
-        <div>
-          <h2>🎓 ${l.title}</h2>
-          <p class="sec-sub">${l.summary}</p>
-        </div>
-        <button class="btn btn-secondary" id="ac-back-list">← Catálogo Academia</button>
-      </div>
-
-      <div class="ac-studio">
-        <div class="board-stage">
+      <div class="ac-layout">
+        <div class="board-column">
           <div class="board-wrapper" id="ac-board-wrapper">
             <div class="board-grid" id="ac-board-grid"></div>
-            <svg class="tactical-svg" id="ac-svg" viewBox="0 0 800 800" preserveAspectRatio="none"></svg>
             <canvas class="fx-canvas" id="ac-fx-canvas"></canvas>
           </div>
         </div>
 
-        <div class="ac-panel">
-          <div class="card">
-            <div class="ac-mode-switch">
-              <button class="btn ${!this.practiceMode ? 'btn-primary' : 'btn-secondary'}" id="ac-mode-guided">📖 Guiado</button>
-              <button class="btn ${this.practiceMode ? 'btn-primary' : 'btn-secondary'}" id="ac-mode-practice">🎯 Practicar Yo</button>
+        <div class="side-panel">
+          <div class="card" style="display:flex;flex-direction:column;gap:10px">
+            <div class="status-row">
+              <span class="pos-badge" id="ac-badge"></span>
+              <span class="turn-pill" id="ac-step-label"></span>
+            </div>
+            <h3 id="ac-title" style="font-size:1.05rem"></h3>
+            <div class="ac-note" id="ac-note"></div>
+            <div class="ac-controls">
+              <button id="ac-first" class="btn btn-secondary" title="Inicio">⏮</button>
+              <button id="ac-prev" class="btn btn-secondary" title="Anterior">◀</button>
+              <button id="ac-next" class="btn btn-primary" title="Siguiente">▶</button>
+              <button id="ac-voice" class="btn btn-secondary active" title="Voz del profesor">🔊 Voz</button>
             </div>
           </div>
 
           <div class="card">
             <div class="card-header">
-              <h2 id="ac-step-counter">Paso 0 / ${l.steps.length}</h2>
-              <button class="btn-tiny" id="ac-voice-toggle">${this.voiceOn ? '🔊 Voz: ON' : '🔇 Voz: OFF'}</button>
+              <h2>Lecciones</h2>
+              <span class="mini-hint" id="ac-count"></span>
             </div>
-            <div class="ac-step-box" id="ac-step-box"></div>
-            <div class="ac-line-chips" id="ac-line-chips" style="margin-top:10px"></div>
-          </div>
-
-          <div class="card">
-            <div class="pz-actions" id="ac-controls">
-              <button class="btn btn-secondary" id="ac-prev">◀ Anterior</button>
-              <button class="btn btn-primary" id="ac-next">Siguiente ▶</button>
-              <button class="btn btn-secondary" id="ac-restart">↺ Reiniciar</button>
-              <button class="btn btn-ghost" id="ac-replay-voice">🗣 Repetir</button>
-            </div>
+            <div class="ac-list" id="ac-list"></div>
           </div>
         </div>
       </div>
     `;
 
-    this.boardWrapper = this.rootEl.querySelector('#ac-board-wrapper');
-    this.boardGrid = this.rootEl.querySelector('#ac-board-grid');
-    this.svgEl = this.rootEl.querySelector('#ac-svg');
-    this.fxCanvas = this.rootEl.querySelector('#ac-fx-canvas');
-    this.stepBoxEl = this.rootEl.querySelector('#ac-step-box');
-    this.counterEl = this.rootEl.querySelector('#ac-step-counter');
-    this.chipsEl = this.rootEl.querySelector('#ac-line-chips');
-    this.prevBtn = this.rootEl.querySelector('#ac-prev');
-    this.nextBtn = this.rootEl.querySelector('#ac-next');
+    this.dom = {
+      wrapper: this.container.querySelector('#ac-board-wrapper'),
+      grid: this.container.querySelector('#ac-board-grid'),
+      canvas: this.container.querySelector('#ac-fx-canvas'),
+      badge: this.container.querySelector('#ac-badge'),
+      stepLabel: this.container.querySelector('#ac-step-label'),
+      title: this.container.querySelector('#ac-title'),
+      note: this.container.querySelector('#ac-note'),
+      list: this.container.querySelector('#ac-list'),
+      count: this.container.querySelector('#ac-count'),
+      btnVoice: this.container.querySelector('#ac-voice')
+    };
 
-    this.fx = new CombatFX(this.fxCanvas, this.boardWrapper);
-    this.fx.setPalette(theme.fxPalette);
-    requestAnimationFrame(() => this.fx?._resize());
+    this.fx = new CombatFX(this.dom.canvas, this.dom.wrapper);
+    this.fx.setPalette(this._getTheme().fxPalette);
 
-    this.rootEl.querySelector('#ac-back-list')?.addEventListener('click', () => {
-      this.activeLesson = null;
-      this._renderCatalog();
+    this.container.querySelector('#ac-back').addEventListener('click', () => {
+      this.destroy();
+      this.onBack?.();
     });
-    this.rootEl.querySelector('#ac-mode-guided')?.addEventListener('click', () => {
-      if (this.practiceMode) this.openLesson(this.activeLesson, false);
-    });
-    this.rootEl.querySelector('#ac-mode-practice')?.addEventListener('click', () => {
-      if (!this.practiceMode) this.openLesson(this.activeLesson, true);
-    });
-    this.rootEl.querySelector('#ac-voice-toggle')?.addEventListener('click', (e) => {
-      this.voiceOn = !this.voiceOn;
-      e.target.textContent = this.voiceOn ? '🔊 Voz: ON' : '🔇 Voz: OFF';
-      if (!this.voiceOn) stopSpeech();
-    });
-    this.rootEl.querySelector('#ac-restart')?.addEventListener('click', () => {
-      this.openLesson(this.activeLesson, this.practiceMode);
-    });
-    this.rootEl.querySelector('#ac-replay-voice')?.addEventListener('click', () => {
-      const txt = this.stepIdx > 0
-        ? this.activeLesson.steps[this.stepIdx - 1].text
-        : `${this.activeLesson.title}.${this.activeLesson.summary}`;
-      speakSpanish(txt, true);
-    });
-    this.prevBtn?.addEventListener('click', () => this._stepBack());
-    this.nextBtn?.addEventListener('click', () => this._stepForward());
 
-    this._renderStudioState();
-  }
-
-  _stepForward() {
-    if (this.isAnimating || this.stepIdx >= this.activeLesson.steps.length) return;
-    const step = this.activeLesson.steps[this.stepIdx];
-    const move = resolveStepMove(this.engine, step);
-    if (!move) return;
-
-    this.customFeedback = null;
-    this._executeLessonMove(move, step, () => {
-      if (this.stepIdx >= this.activeLesson.steps.length) {
-        this._markLessonCompleted();
-      }
-      speakSpanish(step.text, this.voiceOn);
-    });
-  }
-
-  _stepBack() {
-    if (this.isAnimating || this.stepIdx <= 0) return;
-    stopSpeech();
-    this.engine.undo();
-    this.stepIdx--;
-    this.playedSans.pop();
-    this.selected = null;
-    this.legalForSelected = [];
-    this.customFeedback = null;
-    this._renderStudioState();
-  }
-
-  _scheduleOpponentPracticeMove() {
-    const token = this._animToken;
-    setTimeout(() => {
-      if (token !== this._animToken || !this.activeLesson || !this.practiceMode) return;
-      if (this.stepIdx >= this.activeLesson.steps.length) return;
-      if (this.engine.turn === this.activeLesson.side) return;
-
-      const step = this.activeLesson.steps[this.stepIdx];
-      const move = resolveStepMove(this.engine, step);
-      if (!move) return;
-
-      this._executeLessonMove(move, step, () => {
-        if (this.stepIdx >= this.activeLesson.steps.length) {
-          this._markLessonCompleted();
-        }
+    this.container.querySelectorAll('[data-ac-cat]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.category = btn.dataset.acCat;
+        this.container.querySelectorAll('[data-ac-cat]').forEach(b => {
+          b.className = b.dataset.acCat === this.category ? 'btn btn-primary' : 'btn btn-secondary';
+        });
+        const first = ACADEMY_LESSONS.find(l => l.category === this.category);
+        if (first) this.loadLesson(first);
       });
-    }, 480);
+    });
+
+    this.container.querySelector('#ac-first').addEventListener('click', () => this.goToStep(0, false));
+    this.container.querySelector('#ac-prev').addEventListener('click', () => this.goToStep(this.stepIdx - 1, false));
+    this.container.querySelector('#ac-next').addEventListener('click', () => this.goToStep(this.stepIdx + 1, true));
+    this.dom.btnVoice.addEventListener('click', () => {
+      this.voiceOn = !this.voiceOn;
+      this.dom.btnVoice.classList.toggle('active', this.voiceOn);
+      this.dom.btnVoice.textContent = this.voiceOn ? '🔊 Voz' : '🔇 Voz';
+      if (!this.voiceOn) this._stopSpeech();
+    });
   }
 
-  _handleSquareClick(r, c) {
-    if (!this.practiceMode || this.isAnimating) return;
-    if (this.stepIdx >= this.activeLesson.steps.length) return;
-    if (this.engine.turn !== this.activeLesson.side) return;
+  loadLesson(lesson) {
+    this._token++;
+    this.fx?.cancelActive();
+    this._stopSpeech();
+    this.lesson = lesson;
+    this.stepIdx = 0;
+    this.hiddenSquares.clear();
+    this.engine.reset(lesson.positionId || 518);
+    this.fx?.setPalette(this._getTheme().fxPalette);
+    this._renderAll();
+  }
 
-    if (this.selected) {
-      const direct = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c);
-      const castleByDest = this.legalForSelected.filter(m => m.castle && m.from.r === r && m.kingToCol === c);
-      const candidates = direct.length ? direct : castleByDest;
+  goToStep(targetStep, animateForward = false) {
+    const clamped = Math.max(0, Math.min(this.lesson.steps.length, targetStep));
+    const token = ++this._token;
+    this.fx?.cancelActive();
+    this._stopSpeech();
+    this.hiddenSquares.clear();
 
-      if (candidates.length > 0) {
-        const chosen = candidates[0];
-        const step = this.activeLesson.steps[this.stepIdx];
-        const expected = resolveStepMove(this.engine, step);
-
-        const isMatch = expected && (
-          (expected.castle && chosen.castle === expected.castle) ||
-          (!expected.castle &&
-            chosen.from.r === expected.from.r &&
-            chosen.from.c === expected.from.c &&
-            chosen.to.r === expected.to.r &&
-            chosen.to.c === expected.to.c)
-        );
-
-        if (!isMatch) {
-          this.selected = null;
-          this.legalForSelected = [];
-          this.sound.playCheck();
-          this.customFeedback = {
-            type: 'err',
-            text: 'Sigue la flecha verde en el tablero para ejecutar la jugada de la lección.'
-          };
-          this._renderStudioState();
-          return;
-        }
-
-        this.customFeedback = null;
-        this._executeLessonMove(chosen, step, () => {
-          speakSpanish(step.text, this.voiceOn);
-          if (this.stepIdx >= this.activeLesson.steps.length) {
-            this._markLessonCompleted();
-            this._renderStudioState();
-          } else {
-            this._scheduleOpponentPracticeMove();
-          }
+    // Si avanzamos 1 paso desde el estado actual, animamos la jugada en vivo
+    if (animateForward && clamped === this.stepIdx + 1) {
+      const stepObj = this.lesson.steps[this.stepIdx];
+      const legal = this.engine.getLegalMoves(this.engine.turn);
+      const match = legal.find(m => toUci(m.from, m.to) === stepObj.uci);
+      if (match) {
+        this.stepIdx = clamped;
+        this._animateMove(match, () => {
+          if (token !== this._token) return;
+          this._renderInfo();
+          this._speak(stepObj.text);
         });
         return;
       }
     }
 
-    const piece = this.engine.board[r][c];
-    if (piece && piece.color === this.engine.turn) {
-      if (this.selected && this.selected.r === r && this.selected.c === c) {
-        this.selected = null;
-        this.legalForSelected = [];
-      } else {
-        this.selected = { r, c };
-        this.legalForSelected = this.engine.getLegalMovesFrom(r, c);
-      }
-      this._renderStudioState();
-    } else {
-      this.selected = null;
-      this.legalForSelected = [];
-      this._renderStudioState();
+    // Salto directo o retroceso
+    this.engine.reset(this.lesson.positionId || 518);
+    for (let i = 0; i < clamped; i++) {
+      const uci = this.lesson.steps[i].uci;
+      const legal = this.engine.getLegalMoves(this.engine.turn);
+      const match = legal.find(m => toUci(m.from, m.to) === uci);
+      if (match) this.engine.makeMove(match);
+    }
+    this.stepIdx = clamped;
+    this._renderAll();
+    if (clamped > 0) {
+      this._speak(this.lesson.steps[clamped - 1].text);
     }
   }
 
-  _executeLessonMove(move, step, onDone) {
-    const token = ++this._animToken;
-    const theme = this._theme();
+  _animateMove(move, onDone) {
+    const theme = this._getTheme();
     const moverColor = this.engine.turn;
     const enemyColor = moverColor === 'w' ? 'b' : 'w';
     const record = this.engine.makeMove(move);
-
-    this.stepIdx++;
-    this.playedSans.push(record.san);
-    this.selected = null;
-    this.legalForSelected = [];
-    this.isAnimating = true;
-    this.hiddenSquares.clear();
+    const flipped = Boolean(this.lesson.flipped);
 
     const finish = () => {
-      if (token !== this._animToken) return;
       this.hiddenSquares.clear();
-      this.isAnimating = false;
-      this._renderStudioState();
-      if (onDone) onDone();
+      this._renderBoard();
+      onDone?.();
     };
 
     if (record.castle) {
       const row = record.from.r;
       this.hiddenSquares.add(`${row},${record.kingToCol}`);
       this.hiddenSquares.add(`${row},${record.rookToCol}`);
-      this._renderStudioState();
-      this.sound.playCastle();
-
+      this._renderBoard();
+      this.sound?.playCastle();
       this.fx.animateCastle({
         kingHtml: theme.renderPiece('K', moverColor),
         rookHtml: theme.renderPiece('R', moverColor),
@@ -764,7 +521,7 @@ export class AcademyView {
         kingTo: record.kingToCol,
         rookFrom: record.rookFromCol,
         rookTo: record.rookToCol,
-        flipped: this.flipped,
+        flipped,
         onComplete: finish
       });
       return;
@@ -772,113 +529,114 @@ export class AcademyView {
 
     if (record.captured) {
       this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
-      this._renderStudioState();
-
+      this._renderBoard();
       this.fx.playCombatSequence({
         pieceType: record.piece,
         attackerHtml: theme.renderPiece(record.promo || record.piece, moverColor),
         victimHtml: theme.renderPiece(record.captured, enemyColor),
         from: record.from,
         to: record.to,
-        flipped: this.flipped,
-        onCharge: () => this.sound.playCharge(record.piece),
-        onImpact: () => this.sound.playAttack(record.piece),
+        flipped,
+        onCharge: () => this.sound?.playCharge(record.piece),
+        onImpact: () => this.sound?.playAttack(record.piece),
         onComplete: finish
       });
       return;
     }
 
     this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
-    this._renderStudioState();
-    this.sound.playMove(record.piece);
-
+    this._renderBoard();
+    this.sound?.playMove(record.piece);
     this.fx.animateRegularMove({
       pieceHtml: theme.renderPiece(record.promo || record.piece, moverColor),
       pieceType: record.piece,
       from: record.from,
       to: record.to,
-      flipped: this.flipped,
+      flipped,
       onComplete: finish
     });
   }
 
-  _markLessonCompleted() {
-    if (!this.completed.has(this.activeLesson.id)) {
-      this.completed.add(this.activeLesson.id);
-      this._saveCompleted();
-      this.store.addMessage({
-        icon: '🎓',
-        title: `Lección completada: ${this.activeLesson.title}`,
-        body: 'Has completado esta guía de la Academia. Ya puedes practicarla libremente en el tablero.'
-      });
-      this.store.save();
-    }
+  _renderAll() {
+    this._renderBoard();
+    this._renderInfo();
+    this._renderList();
   }
 
-  _renderStudioState() {
-    if (!this.boardGrid || !this.engine) return;
-    const theme = this._theme();
-    const l = this.activeLesson;
-    const total = l.steps.length;
-    const lastMove = this.engine.history[this.engine.history.length - 1] || null;
+  _renderInfo() {
+    const l = this.lesson;
+    this.dom.badge.textContent = l.positionId === 518 ? '♟ CLÁSICO' : `🎲 FISCHER #${l.positionId}`;
+    this.dom.stepLabel.textContent = `Paso ${this.stepIdx} / ${l.steps.length}`;
+    this.dom.title.textContent = l.title;
+    this.dom.note.textContent = this.stepIdx === 0
+      ? `${l.intro} Pulsa ▶ para comenzar la demostración.`
+      : l.steps[this.stepIdx - 1].text;
+  }
 
-    this.boardGrid.innerHTML = '';
+  _renderList() {
+    const subset = ACADEMY_LESSONS.filter(l => l.category === this.category);
+    this.dom.count.textContent = `${subset.length} lecciones`;
+
+    this.dom.list.innerHTML = subset.map(l => `
+      <button class="ac-item ${l.id === this.lesson.id ? 'active' : ''}" data-ac-id="${l.id}">
+        <span style="font-weight:700;font-size:0.86rem">${l.title}</span>
+        <span class="mini-hint">${l.steps.length} jugadas</span>
+      </button>
+    `).join('');
+
+    this.dom.list.querySelectorAll('[data-ac-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const found = ACADEMY_LESSONS.find(x => x.id === btn.dataset.acId);
+        if (found) this.loadLesson(found);
+      });
+    });
+  }
+
+  _renderBoard() {
+    const theme = this._getTheme();
+    const grid = this.dom.grid;
+    const flipped = Boolean(this.lesson.flipped);
+    grid.innerHTML = '';
+
+    const lastMove = this.engine.history[this.engine.history.length - 1] || null;
 
     for (let vr = 0; vr < 8; vr++) {
       for (let vc = 0; vc < 8; vc++) {
-        const r = this.flipped ? 7 - vr : vr;
-        const c = this.flipped ? 7 - vc : vc;
+        const r = flipped ? 7 - vr : vr;
+        const c = flipped ? 7 - vc : vc;
 
         const sq = document.createElement('div');
-        sq.className = `square ${(r + c) \% 2 === 0 ? 'light' : 'dark'}`;  if (lastMove) { const toCol = lastMove.castle ? lastMove.kingToCol : lastMove.to.c; if (lastMove.from.r === r && lastMove.from.c === c) sq.classList.add('last-from'); if (lastMove.to.r === r && toCol === c) sq.classList.add('last-to'); } if (this.selected && this.selected.r === r && this.selected.c === c) { sq.classList.add('selected'); }  if (this.practiceMode) { const matching = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c); const castleMatch = matching.find(m => m.castle); if (castleMatch) { sq.classList.add('castle-target'); } else if (matching.length > 0) { const isCap = matching.some(m => m.captured \vert{}\vert{} m.ep); const marker = document.createElement('div'); marker.className = isCap ? 'capture-ring' : 'move-dot'; sq.appendChild(marker); } }  if (vc === 0) { const rankEl = document.createElement('span'); rankEl.className = 'coord-rank'; rankEl.textContent = 8 - r; sq.appendChild(rankEl); } if (vr === 7) { const fileEl = document.createElement('span'); fileEl.className = 'coord-file'; fileEl.textContent = FILES[c]; sq.appendChild(fileEl); }  const piece = this.engine.board[r][c]; if (piece && !this.hiddenSquares.has(`${r},${c}`)) { const wrap = document.createElement('div'); wrap.className = 'piece-wrap'; wrap.innerHTML = theme.renderPiece(piece.type, piece.color); sq.appendChild(wrap); }  sq.addEventListener('click', () => this._handleSquareClick(r, c)); this.boardGrid.appendChild(sq); } }  // Dibujar flecha verde guiando la siguiente jugada this.svgEl.innerHTML = ''; if (!this.isAnimating && this.stepIdx < total) { const showGuideArrow = !this.practiceMode \vert{}\vert{} this.engine.turn === l.side; if (showGuideArrow) { const nextMove = resolveStepMove(this.engine, l.steps[this.stepIdx]); if (nextMove) { const toCol = nextMove.castle ? nextMove.kingToCol : nextMove.to.c; const visualToCol = (nextMove.castle && toCol === nextMove.from.c) ? nextMove.rookFromCol : toCol; this._drawArrow(nextMove.from.r, nextMove.from.c, nextMove.to.r, visualToCol, '#22c55e'); } } }  // Textos y botones this.counterEl.textContent = `Paso ${this.stepIdx} / ${total}`; if (this.prevBtn) { this.prevBtn.style.display = this.practiceMode ? 'none' : 'inline-block'; this.prevBtn.disabled = this.stepIdx === 0; } if (this.nextBtn) { this.nextBtn.style.display = this.practiceMode ? 'none' : 'inline-block'; this.nextBtn.disabled = this.stepIdx >= total; }  if (this.customFeedback) { this.stepBoxEl.className = `ac-step-box ${this.customFeedback.type}`;
-      this.stepBoxEl.textContent = this.customFeedback.text;
-    } else if (this.stepIdx >= total) {
-      this.stepBoxEl.className = 'ac-step-box ok';
-      this.stepBoxEl.textContent = `✓ ¡Lección completada! ${l.steps[total - 1].text}`; } else if (this.stepIdx === 0) { this.stepBoxEl.className = 'ac-step-box'; this.stepBoxEl.textContent = this.practiceMode ? 'Modo Práctica: ejecuta en el tablero la jugada marcada con la flecha verde.' : 'Pulsa Siguiente ▶ para ver y escuchar cada jugada de la línea paso a paso.'; } else { this.stepBoxEl.className = 'ac-step-box'; this.stepBoxEl.textContent = l.steps[this.stepIdx - 1].text; }  this.chipsEl.innerHTML = this.playedSans.map((san, idx) => { const cls = idx === this.playedSans.length - 1 ? 'now' : 'done'; const prefix = idx \% 2 === 0 ? `${Math.floor(idx / 2) + 1}. ` : '';
-      return `<span class="ac-move-pill ${cls}">${prefix}${san}</span>`;
-    }).join('');
-  }
+        sq.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
 
-  _drawArrow(fromR, fromC, toR, toC, color) {
-    const ns = 'http://www.w3.org/2000/svg';
-    const vr1 = this.flipped ? 7 - fromR : fromR;
-    const vc1 = this.flipped ? 7 - fromC : fromC;
-    const vr2 = this.flipped ? 7 - toR : toR;
-    const vc2 = this.flipped ? 7 - toC : toC;
+        if (lastMove) {
+          const toCol = lastMove.castle ? lastMove.kingToCol : lastMove.to.c;
+          if (lastMove.from.r === r && lastMove.from.c === c) sq.classList.add('last-from');
+          if (lastMove.to.r === r && toCol === c) sq.classList.add('last-to');
+        }
 
-    const x1 = vc1 * 100 + 50;
-    const y1 = vr1 * 100 + 50;
-    const x2 = vc2 * 100 + 50;
-    const y2 = vr2 * 100 + 50;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.hypot(dx, dy);
-    if (len < 10) return;
+        if (vc === 0) {
+          const rk = document.createElement('span');
+          rk.className = 'coord-rank';
+          rk.textContent = 8 - r;
+          sq.appendChild(rk);
+        }
+        if (vr === 7) {
+          const fl = document.createElement('span');
+          fl.className = 'coord-file';
+          fl.textContent = FILES[c];
+          sq.appendChild(fl);
+        }
 
-    const ux = dx / len;
-    const uy = dy / len;
+        const piece = this.engine.board[r][c];
+        if (piece && !this.hiddenSquares.has(`${r},${c}`)) {
+          const wrap = document.createElement('div');
+          wrap.className = 'piece-wrap';
+          wrap.innerHTML = theme.renderPiece(piece.type, piece.color);
+          sq.appendChild(wrap);
+        }
 
-    const line = document.createElementNS(ns, 'line');
-    line.setAttribute('x1', x1 + ux * 18);
-    line.setAttribute('y1', y1 + uy * 18);
-    line.setAttribute('x2', x2 - ux * 26);
-    line.setAttribute('y2', y2 - uy * 26);
-    line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', '14');
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.86');
-    this.svgEl.appendChild(line);
-
-    const tipX = x2 - ux * 6;
-    const tipY = y2 - uy * 6;
-    const baseX = x2 - ux * 32;
-    const baseY = y2 - uy * 32;
-    const px = -uy * 16;
-    const py = ux * 16;
-    const head = document.createElementNS(ns, 'polygon');
-    head.setAttribute('points', `${tipX},${tipY} ${baseX + px},${baseY + py} ${baseX - px},${baseY - py}`);
-    head.setAttribute('fill', color);
-    head.setAttribute('opacity', '0.86');
-    this.svgEl.appendChild(head);
+        grid.appendChild(sq);
+      }
+    }
   }
 }
