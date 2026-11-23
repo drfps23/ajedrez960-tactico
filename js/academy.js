@@ -401,4 +401,148 @@ export class AcademyTrainer {
       if (!nextStep) {
         this._markDone(this.lesson.id);
         this._refreshProgressBadges();
-        this._setTask('ok', '🏆 ¡Lección completada! Pulsa "Siguiente Lección →" para continuar o practícala contra la
+        this._setTask('ok', '🏆 ¡Lección completada! Pulsa "Siguiente Lección →" para continuar o practícala contra la IA.');
+      } else if (nextStep.interactive) {
+        this._setTask('task', `🎯 ${nextStep.prompt}`);
+      } else {
+        this._setTask('info', 'Observa la respuesta del rival...');
+      }
+
+      this._syncText();
+
+      if (this.voiceOn) {
+        const spoken = nextStep?.interactive && !continueAuto
+          ? `${step.text} ${nextStep.prompt}`
+          : step.text;
+        this.app.analyzer?.voice?.speak(spoken, true);
+      }
+
+      if (nextStep && !nextStep.interactive && step.interactive && !continueAuto) {
+        this.autoTimer = setTimeout(() => this.stepForward(false), 1600);
+      } else if (continueAuto && nextStep) {
+        this.autoTimer = setTimeout(() => this.stepForward(true), 3200);
+      }
+    };
+
+    const flipped = this._flipped();
+    this.hidden.clear();
+    if (rec.castle) {
+      const row = rec.from.r;
+      this.hidden.add(`${row},${rec.kingToCol}`);
+      this.hidden.add(`${row},${rec.rookToCol}`);
+      this._renderBoard();
+      this.app.sound.playCastle();
+      this.fx.animateCastle({
+        kingHtml: this.app.pieceRenderer('K', moverColor),
+        rookHtml: this.app.pieceRenderer('R', moverColor),
+        row,
+        kingFrom: rec.from.c,
+        kingTo: rec.kingToCol,
+        rookFrom: rec.rookFromCol,
+        rookTo: rec.rookToCol,
+        flipped,
+        onComplete: finish
+      });
+    } else if (rec.captured) {
+      this.hidden.add(`${rec.to.r},${rec.to.c}`);
+      this._renderBoard();
+      this.fx.playCombatSequence({
+        pieceType: rec.piece,
+        attackerHtml: this.app.pieceRenderer(rec.piece, moverColor),
+        victimHtml: this.app.pieceRenderer(rec.captured, enemyColor),
+        from: rec.from,
+        to: rec.to,
+        flipped,
+        onCharge: () => this.app.sound.playCharge(rec.piece),
+        onImpact: () => this.app.sound.playAttack(rec.piece),
+        onComplete: finish
+      });
+    } else {
+      this.hidden.add(`${rec.to.r},${rec.to.c}`);
+      this._renderBoard();
+      this.app.sound.playMove(rec.piece);
+      this.fx.animateRegularMove({
+        pieceHtml: this.app.pieceRenderer(rec.piece, moverColor),
+        pieceType: rec.piece,
+        from: rec.from,
+        to: rec.to,
+        flipped,
+        onComplete: finish
+      });
+    }
+  }
+
+  _syncText() {
+    if (this.progEl) this.progEl.textContent = `Paso ${this.stepIdx} / ${this.lesson.steps.length}`;
+    if (this.textEl) {
+      this.textEl.textContent = this.stepIdx === 0
+        ? this.lesson.summary
+        : this.lesson.steps[this.stepIdx - 1].text;
+    }
+    const isFinished = this.stepIdx >= this.lesson.steps.length;
+    const waiting = this._isWaitingForUser();
+    if (this.nextBtn) {
+      this.nextBtn.textContent = isFinished
+        ? 'Siguiente Lección →'
+        : (waiting ? '⏭ Ver jugada' : 'Siguiente ▶');
+    }
+    if (this.hintBtn) this.hintBtn.style.display = waiting ? '' : 'none';
+  }
+
+  _renderBoard() {
+    if (!this.gridEl) return;
+    this.gridEl.innerHTML = '';
+    const flipped = this._flipped();
+    const last = this.engine.history[this.engine.history.length - 1] || null;
+
+    for (let vr = 0; vr < 8; vr++) {
+      for (let vc = 0; vc < 8; vc++) {
+        const r = flipped ? 7 - vr : vr;
+        const c = flipped ? 7 - vc : vc;
+
+        const sq = document.createElement('div');
+        sq.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
+        if (last) {
+          const toCol = last.castle ? last.kingToCol : last.to.c;
+          if (last.from.r === r && last.from.c === c) sq.classList.add('last-from');
+          if (last.to.r === r && toCol === c) sq.classList.add('last-to');
+        }
+        if (this.selected && this.selected.r === r && this.selected.c === c) sq.classList.add('selected');
+        if (this.hintSquares.has(`${r},${c}`)) sq.classList.add('hint-sq');
+
+        const matching = this.legal.filter(m => m.to.r === r && m.to.c === c);
+        if (matching.some(m => m.castle)) {
+          sq.classList.add('castle-target');
+        } else if (matching.length > 0) {
+          const mk = document.createElement('div');
+          mk.className = matching.some(m => m.captured) ? 'capture-ring' : 'move-dot';
+          sq.appendChild(mk);
+        }
+
+        if (vc === 0) {
+          const rk = document.createElement('span');
+          rk.className = 'coord-rank';
+          rk.textContent = 8 - r;
+          sq.appendChild(rk);
+        }
+        if (vr === 7) {
+          const fl = document.createElement('span');
+          fl.className = 'coord-file';
+          fl.textContent = FILES[c];
+          sq.appendChild(fl);
+        }
+
+        const piece = this.engine.board[r][c];
+        if (piece && !this.hidden.has(`${r},${c}`)) {
+          const wrap = document.createElement('div');
+          wrap.className = 'piece-wrap';
+          wrap.innerHTML = this.app.pieceRenderer(piece.type, piece.color);
+          sq.appendChild(wrap);
+        }
+
+        sq.addEventListener('click', () => this._onSquareClick(r, c));
+        this.gridEl.appendChild(sq);
+      }
+    }
+  }
+}
