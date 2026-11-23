@@ -11,6 +11,8 @@ import { attachAuthSystem } from './auth.js';
 import { attachCoachAvatar } from './coach_avatar.js';
 import { attachArmory } from './armory.js';
 import { attachSocialFeatures } from './social.js';
+import { attachHistoryVault } from './history_vault.js';
+import { attachDailyMissions } from './missions.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -22,7 +24,7 @@ function attachPlugins() {
     return;
   }
 
-  // Fase 7: Problemas y Academia
+  // Fase 7: Problemas y Academia (4 niveles interactivos)
   app.puzzles = new PuzzleTrainer(app);
   app.academy = new AcademyTrainer(app);
 
@@ -41,7 +43,7 @@ function attachPlugins() {
   attachOpeningBook(app);
   attachTouchControls(app);
 
-  // Fase 9 + Mejora: Stockfish en IA y Análisis Post-Partida 100% automático
+  // Fase 9 + Calibración: Stockfish en IA y Análisis Post-Partida automático
   attachStockfishLevels(app);
   attachStockfishAnalyzer(app);
 
@@ -52,7 +54,7 @@ function attachPlugins() {
   const auth = attachAuthSystem(app);
   introPromise.then(() => auth.ensureSession({ skipIfInvite: true }));
 
-  // Fase 12: Avatar Animado del Entrenador con voces masculina/femenina diferenciadas
+  // Fase 12: Cabina izquierda del Entrenador con voz diferenciada
   attachCoachAvatar(app);
 
   // Fase 13: Armería FX personalizable por cada pieza
@@ -60,6 +62,10 @@ function attachPlugins() {
 
   // Fase 14: Reacciones Rápidas Online + Tarjeta de Victoria compartible
   attachSocialFeatures(app);
+
+  // Fase 15: Archivo de Partidas Guardadas + Misiones Diarias y XP
+  attachHistoryVault(app);
+  attachDailyMissions(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
