@@ -5,6 +5,11 @@ import { attachOpeningBook } from './openings.js';
 import { attachTouchControls } from './touch.js';
 import { attachStockfishLevels } from './ai_levels.js';
 import { attachMobileAndStoreReady } from './mobile.js';
+import { runCinematicIntro } from './intro.js';
+import { attachAuthSystem } from './auth.js';
+
+// Lanza la pantalla de entrada de inmediato al abrir la app
+const introPromise = runCinematicIntro();
 
 function attachPlugins() {
   const app = window.chessApp;
@@ -35,8 +40,12 @@ function attachPlugins() {
   // Fase 9: Niveles ELO reales y Veredicto Profundo con Stockfish
   attachStockfishLevels(app);
 
-  // Fase 10: Háptica móvil, PWA Offline, marca segura y puente Capacitor/RevenueCat
+  // Fase 10: Háptica móvil, PWA Offline y puente Capacitor/RevenueCat
   attachMobileAndStoreReady(app);
+
+  // Fase 11: Sistema de Cuentas e Invitado tras finalizar la intro
+  const auth = attachAuthSystem(app);
+  introPromise.then(() => auth.ensureSession({ skipIfInvite: true }));
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
