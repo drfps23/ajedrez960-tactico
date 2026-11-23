@@ -1,6 +1,9 @@
 import { REPERTOIRE } from './data/repertoire_data.js';
+import { Chess960Engine } from './engine.js';
+import { detectOpening } from './openings.js';
 
 const SCOUT_USER_KEY = 'ajedrez960_scout_last_user_v1';
+const VAULT_KEY = 'ajedrez960_saved_games_v1';
 
 function esc(str) {
   return String(str ?? '')
@@ -30,11 +33,45 @@ function parseOpeningFromPgn(pgn) {
   return { eco, name: eco ? `Apertura ${eco}` : 'Apertura General' };
 }
 
-function matchRepertoireOpening(name, eco, color) {
+export function matchRepertoireOpening(name, eco, color) {
   const hay = `${name} ${eco}`.toLowerCase();
   const sameColor = REPERTOIRE.filter(o => o.color === color);
   const hit = sameColor.find(o => o.keywords.some(kw => hay.includes(kw)));
   return hit || sameColor[0] || null;
+}
+
+function fetchLocalAppGames() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(VAULT_KEY) || '[]'); } catch { saved = []; }
+  const classics = saved.filter(g => g && g.variant === 'classic' && Array.isArray(g.moves) && g.moves.length >= 2);
+  if (!classics.length) {
+    throw new Error('Aún no tienes partidas de Ajedrez Clásico guardadas en esta app. Juega 1 o 2 partidas clásicas o elige Chess.com / Lichess.');
+  }
+
+  return classics.map(g => {
+    const sim = new Chess960Engine(518);
+    const limit = Math.min(12, g.moves.length);
+    for (let i = 0; i < limit; i++) {
+      const m = g.moves[i];
+      const legal = sim.getLegalMoves(sim.turn);
+      const found = m.ca
+        ? legal.find(x => x.castle === m.ca)
+        : legal.find(x =>
+            x.from.r === m.fr && x.from.c === m.fc &&
+            x.to.r === m.tr && x.to.c === m.tc &&
+            (x.promo || null) === (m.pr || null)
+          );
+      if (!found) break;
+      sim.makeMove(found);
+    }
+    const op = detectOpening(sim.history);
+    return {
+      color: g.myColor || 'w',
+      outcome: g.outcome || 'draw',
+      opening: op?.name || 'Apertura General',
+      eco: op?.eco || ''
+    };
+  });
 }
 
 async function fetchChessComGames(username) {
@@ -45,7 +82,6 @@ async function fetchChessComGames(username) {
   const archives = archData.archives || [];
   if (!archives.length) throw new Error('Esta cuenta no tiene partidas públicas recientes.');
 
-  // Tomar los últimos 2 meses si el mes actual tiene pocas partidas
   const rawGames = [];
   for (let i = archives.length - 1; i >= Math.max(0, archives.length - 2); i--) {
     const gRes = await fetch(archives[i]);
@@ -109,25 +145,26 @@ function aggregateByColor(games, color) {
 }
 
 export function mountScoutPanel(container, { onTrainOpening }) {
-  let saved = { platform: 'chesscom', username: '' };
+  let saved = { platform: 'app', username: '' };
   try { saved = { ...saved, ...JSON.parse(localStorage.getItem(SCOUT_USER_KEY) || '{}') }; } catch { /* ignorar */ }
 
   container.innerHTML = `
     <div class="rep-scout-box">
       <div class="rep-scout-head">
         <div>
-          <h3>🔎 Escáner de Debilidades (Chess.com / Lichess)</h3>
-          <p class="sec-sub">Analiza tus últimas 45 partidas públicas para descubrir en qué aperturas pierdes más puntos.</p>
+          <h3>🔎 Diagnóstico de Debilidades por Apertura</h3>
+          <p class="sec-sub">Analiza tus partidas jugadas en esta app o importa opcionalmente tu historial público de Chess.com / Lichess.</p>
         </div>
       </div>
 
       <form class="rep-scout-form" id="scout-form">
         <select class="ctrl-select" id="scout-platform">
-          <option value="chesscom" ${saved.platform === 'chesscom' ? 'selected' : ''}>♟ Chess.com</option>
-          <option value="lichess" ${saved.platform === 'lichess' ? 'selected' : ''}>♞ Lichess</option>
+          <option value="app" ${saved.platform === 'app' ? 'selected' : ''}>♛ Mis Partidas en Esta App</option>
+          <option value="chesscom" ${saved.platform === 'chesscom' ? 'selected' : ''}>♟ Chess.com (Cuenta externa)</option>
+          <option value="lichess" ${saved.platform === 'lichess' ? 'selected' : ''}>♞ Lichess (Cuenta externa)</option>
         </select>
-        <input type="text" class="rep-scout-input" id="scout-user" placeholder="Tu usuario (ej. Drfpscolumna)" value="${esc(saved.username)}" required />
-        <button type="submit" class="btn btn-primary" id="scout-btn">⚡ Analizar Cuenta</button>
+        <input type="text" class="rep-scout-input" id="scout-user" placeholder="Tu usuario de Chess.com o Lichess" value="${esc(saved.username)}" />
+        <button type="submit" class="btn btn-primary" id="scout-btn">⚡ Analizar Partidas</button>
       </form>
 
       <div id="scout-output"></div>
@@ -140,36 +177,47 @@ export function mountScoutPanel(container, { onTrainOpening }) {
   const btnEl = container.querySelector('#scout-btn');
   const outEl = container.querySelector('#scout-output');
 
+  const syncInputVisibility = () => {
+    const isLocal = platEl.value === 'app';
+    userEl.style.display = isLocal ? 'none' : '';
+    userEl.required = !isLocal;
+  };
+  syncInputVisibility();
+  platEl.addEventListener('change', syncInputVisibility);
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const platform = platEl.value;
     const username = userEl.value.trim();
-    if (!username) return;
+    if (platform !== 'app' && !username) return;
 
     try { localStorage.setItem(SCOUT_USER_KEY, JSON.stringify({ platform, username })); } catch { /* ignorar */ }
 
     btnEl.disabled = true;
-    btnEl.textContent = '⏳ Escaneando...';
-    outEl.innerHTML = '<p class="sec-sub">Descargando tus partidas recientes...</p>';
+    btnEl.textContent = '⏳ Analizando...';
+    outEl.innerHTML = '<p class="sec-sub">Calculando rendimiento por apertura...</p>';
 
     try {
-      const games = platform === 'chesscom'
-        ? await fetchChessComGames(username)
-        : await fetchLichessGames(username);
+      const games = platform === 'app'
+        ? fetchLocalAppGames()
+        : platform === 'chesscom'
+          ? await fetchChessComGames(username)
+          : await fetchLichessGames(username);
 
+      const labelSource = platform === 'app' ? 'tu historial en esta app' : username;
       const wStats = aggregateByColor(games, 'w');
       const bStats = aggregateByColor(games, 'b');
 
-      const allWithMin = [...wStats.map(x => ({ ...x, color: 'w' })), ...bStats.map(x => ({ ...x, color: 'b' }))]
-        .filter(x => x.total >= 2)
-        .sort((a, b) => a.winPct - b.winPct);
-      const weakest = allWithMin[0] || null;
+      const combined = [...wStats.map(x => ({ ...x, color: 'w' })), ...bStats.map(x => ({ ...x, color: 'b' }))];
+      const withMin = combined.filter(x => x.total >= 2);
+      const pool = withMin.length ? withMin : combined;
+      const weakest = pool.sort((a, b) => a.winPct - b.winPct)[0] || null;
       const weakTarget = weakest ? matchRepertoireOpening(weakest.name, weakest.eco, weakest.color) : null;
 
       const renderCol = (title, color, list) => `
         <div class="rep-scout-col">
           <strong>${title}</strong>
-          ${list.length === 0 ? '<p class="sec-sub">Sin partidas registradas.</p>' : list.slice(0, 5).map(r => {
+          ${list.length === 0 ? '<p class="sec-sub">Sin partidas registradas con este color.</p>' : list.slice(0, 5).map(r => {
             const rec = matchRepertoireOpening(r.name, r.eco, color);
             const barColor = r.winPct >= 55 ? '#22c55e' : r.winPct >= 42 ? '#facc15' : '#f43f5e';
             return `
@@ -187,17 +235,16 @@ export function mountScoutPanel(container, { onTrainOpening }) {
 
       outEl.innerHTML = `
         <div class="rep-scout-summary">
-          <span>✅ <strong>${games.length} partidas</strong> analizadas de <strong>${esc(username)}</strong></span>
+          <span>✅ <strong>${games.length} partida(s)</strong> analizadas de <strong>${esc(labelSource)}</strong></span>
           ${weakest ? `
             <div class="rep-weak-alert">
-              <span>⚠️ Mayor debilidad (${weakest.color === 'w' ? 'Blancas' : 'Negras'}): <strong>${esc(weakest.name)}</strong> (${weakest.winPct}% en ${weakest.total} part.)</span>
-              ${weakTarget ? `<button type="button" class="btn btn-primary" data-train-op="${weakTarget.id}" data-train-color="${weakest.color}">🔥 Corregir con ${esc(weakTarget.name)}</button>` : ''}
+              <span>⚠️ Punto a reforzar (${weakest.color === 'w' ? 'Blancas' : 'Negras'}): <strong>${esc(weakest.name)}</strong> (${weakest.winPct}% en ${weakest.total} part.)</span>${weakTarget ? `<button type="button" class="btn btn-primary" data-train-op="${weakTarget.id}" data-train-color="${weakest.color}">🔥 Entrenar ${esc(weakTarget.name)}</button>` : ''}
             </div>
           ` : ''}
         </div>
         <div class="rep-scout-cols">
-          ${renderCol('⬜ Tus Aperturas con Blancas', 'w', wStats)}
-          ${renderCol('⬛ Tus Defensas con Negras', 'b', bStats)}
+          ${renderCol('⬜ Rendimiento con Blancas', 'w', wStats)}
+          ${renderCol('⬛ Rendimiento con Negras', 'b', bStats)}
         </div>
       `;
 
@@ -205,10 +252,10 @@ export function mountScoutPanel(container, { onTrainOpening }) {
         b.addEventListener('click', () => onTrainOpening(b.dataset.trainColor, b.dataset.trainOp));
       });
     } catch (err) {
-      outEl.innerHTML = `<div class="tr-feedback err">✕ ${esc(err.message || 'No se pudieron leer las partidas en este momento.')}</div>`;
+      outEl.innerHTML = `<div class="tr-feedback err">✕ ${esc(err.message || 'No se pudieron analizar las partidas.')}</div>`;
     } finally {
       btnEl.disabled = false;
-      btnEl.textContent = '⚡ Analizar Cuenta';
+      btnEl.textContent = '⚡ Analizar Partidas';
     }
   });
 }
