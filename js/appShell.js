@@ -3,475 +3,236 @@ import { SUBSCRIPTION_PLANS, ACHIEVEMENT_DEFS } from './store.js';
 
 const AVATAR_OPTIONS = ['♛', '♚', '♞', '♜', '♝', '⚡', '🦁', '🛡️'];
 
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"');
+}
+
 function ensureShellStyles() {
   if (document.querySelector('style[data-shell-css]')) return;
   const style = document.createElement('style');
   style.dataset.shellCss = 'true';
   style.textContent = `
-    /* Navegación global en Topbar */
-    .shell-nav-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-left: auto;
-    }
+    .shell-nav-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
     .shell-menu-btn {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--bg-card);
-      color: var(--text-main);
-      border: 1px solid var(--border-color);
-      border-radius: 9px;
-      padding: 7px 12px;
-      font-size: 0.84rem;
-      font-weight: 700;
-      cursor: pointer;
+      position: relative; display: inline-flex; align-items: center; gap: 6px;
+      background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color);
+      border-radius: 9px; padding: 7px 12px; font-size: 0.84rem; font-weight: 700; cursor: pointer;
     }
     .shell-menu-btn:hover { border-color: var(--accent-cyan); }
     .shell-unread-dot {
-      position: absolute;
-      top: -5px;
-      right: -5px;
-      min-width: 18px;
-      height: 18px;
-      border-radius: 999px;
-      background: #f43f5e;
-      color: #fff;
-      font-size: 0.68rem;
-      font-weight: 800;
-      display: grid;
-      place-items: center;
-      padding: 0 4px;
+      position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px;
+      border-radius: 999px; background: #f43f5e; color: #fff; font-size: 0.68rem;
+      font-weight: 800; display: grid; place-items: center; padding: 0 4px;
     }
     .shell-tier-pill {
-      font-size: 0.7rem;
-      font-weight: 800;
-      letter-spacing: 0.06em;
-      padding: 4px 9px;
-      border-radius: 999px;
-      cursor: pointer;
-      border: 1px solid currentColor;
+      font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; padding: 4px 9px;
+      border-radius: 999px; cursor: pointer; border: 1px solid currentColor;
       background: rgba(15, 23, 42, 0.75);
     }
 
-    /* Selector Clásico vs Fischer 960 */
     .variant-switch {
-      display: inline-flex;
-      background: rgba(9, 13, 22, 0.75);
-      border: 1px solid var(--border-color);
-      border-radius: 9px;
-      padding: 2px;
-      gap: 2px;
+      display: inline-flex; background: rgba(9, 13, 22, 0.75);
+      border: 1px solid var(--border-color); border-radius: 9px; padding: 2px; gap: 2px;
     }
     .variant-btn {
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 0.78rem;
-      font-weight: 700;
-      padding: 5px 10px;
-      border-radius: 7px;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      border: none; background: transparent; color: var(--text-muted);
+      font-size: 0.78rem; font-weight: 700; padding: 5px 10px; border-radius: 7px;
+      cursor: pointer; transition: background 0.15s, color 0.15s;
     }
-    .variant-btn.active {
-      background: linear-gradient(135deg, #0284c7, #6366f1);
-      color: #ffffff;
-    }
+    .variant-btn.active { background: linear-gradient(135deg, #0284c7, #6366f1); color: #ffffff; }
 
-    /* Ocultar controles de partida fuera de la vista Tablero */
     body.shell-mode .top-controls,
-    body.shell-mode main.arena {
-      display: none !important;
-    }
+    body.shell-mode main.arena { display: none !important; }
     body.hide-coords .coord-rank,
-    body.hide-coords .coord-file {
-      display: none !important;
-    }
+    body.hide-coords .coord-file { display: none !important; }
 
-    /* Contenedor de vistas App (Inicio, Perfil, Suscripción, etc.) */
     .shell-view-root {
-      flex: 1;
-      width: 100%;
-      max-width: 1120px;
-      margin: 0 auto;
-      padding: 22px 18px 42px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
+      flex: 1; width: 100%; max-width: 1120px; margin: 0 auto;
+      padding: 22px 18px 42px; display: flex; flex-direction: column; gap: 20px;
     }
     .shell-view-root.hidden { display: none; }
 
-    /* Hero Pantalla de Inicio */
     .home-hero {
       background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(168, 85, 247, 0.14) 55%, rgba(15, 23, 42, 0.85));
-      border: 1px solid var(--border-color);
-      border-radius: 18px;
-      padding: 26px 24px;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 18px;
+      border: 1px solid var(--border-color); border-radius: 18px; padding: 26px 24px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 18px;
     }
-    .home-hero h2 {
-      font-size: 1.55rem;
-      font-weight: 800;
-      margin-bottom: 6px;
-    }
-    .home-hero p {
-      color: var(--text-muted);
-      font-size: 0.92rem;
-      max-width: 560px;
-      line-height: 1.5;
-    }
-    .home-stats-mini {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
+    .home-hero h2 { font-size: 1.55rem; font-weight: 800; margin-bottom: 6px; }
+    .home-hero p { color: var(--text-muted); font-size: 0.92rem; max-width: 560px; line-height: 1.5; }
+    .home-stats-mini { display: flex; gap: 12px; flex-wrap: wrap; }
     .home-stat-pill {
-      background: rgba(9, 13, 22, 0.65);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 10px 14px;
-      text-align: center;
-      min-width: 100px;
+      background: rgba(9, 13, 22, 0.65); border: 1px solid var(--border-color);
+      border-radius: 12px; padding: 10px 14px; text-align: center; min-width: 100px;
     }
-    .home-stat-pill strong {
-      display: block;
-      font-size: 1.15rem;
-      color: var(--accent-cyan);
-    }
-    .home-stat-pill span {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-    }
+    .home-stat-pill strong { display: block; font-size: 1.15rem; color: var(--accent-cyan); }
+    .home-stat-pill span { font-size: 0.72rem; color: var(--text-muted); }
 
-    /* Tarjetas de modos principales */
-    .home-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
-      gap: 14px;
-    }
+    .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 14px; }
     .mode-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 15px;
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      cursor: pointer;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 15px;
+      padding: 18px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;
       transition: transform 0.14s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-      text-align: left;
-      color: var(--text-main);
+      text-align: left; color: var(--text-main);
     }
     .mode-card:hover {
-      transform: translateY(-3px);
-      border-color: var(--accent-cyan);
+      transform: translateY(-3px); border-color: var(--accent-cyan);
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
     }
-    .mode-card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+    .mode-card-top { display: flex; justify-content: space-between; align-items: center; }
     .mode-card-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 11px;
-      display: grid;
-      place-items: center;
-      font-size: 1.4rem;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center;
+      font-size: 1.4rem; background: rgba(56, 189, 248, 0.14); border: 1px solid rgba(56, 189, 248, 0.3);
     }
     .mode-card-tag {
-      font-size: 0.68rem;
-      font-weight: 800;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: rgba(34, 197, 94, 0.16);
-      color: #4ade80;
+      font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;
+      background: rgba(34, 197, 94, 0.16); color: #4ade80;
     }
-    .mode-card-tag.soon {
-      background: rgba(250, 204, 21, 0.16);
-      color: #facc15;
-    }
+    .mode-card-tag.soon { background: rgba(250, 204, 21, 0.16); color: #facc15; }
     .mode-card h3 { font-size: 1.04rem; font-weight: 700; }
     .mode-card p { font-size: 0.82rem; color: var(--text-muted); line-height: 1.45; flex: 1; }
-    .mode-card-cta {
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: var(--accent-cyan);
-    }
+    .mode-card-cta { font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan); }
 
-    /* Accesos rápidos inferiores en Inicio */
-    .quick-strip {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 10px;
-    }
+    .quick-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .quick-btn {
-      background: rgba(15, 23, 42, 0.65);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 12px;
-      color: var(--text-main);
-      font-size: 0.84rem;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      background: rgba(15, 23, 42, 0.65); border: 1px solid var(--border-color); border-radius: 12px;
+      padding: 12px; color: var(--text-main); font-size: 0.84rem; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
     }
     .quick-btn:hover { border-color: var(--accent-cyan); }
 
-    /* Drawer Menú Lateral */
     .drawer-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(2, 6, 23, 0.72);
-      backdrop-filter: blur(3px);
-      z-index: 80;
-      display: flex;
-      justify-content: flex-end;
+      position: fixed; inset: 0; background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(3px); z-index: 80; display: flex; justify-content: flex-end;
     }
     .drawer-backdrop.hidden { display: none; }
     .drawer-panel {
-      width: min(320px, 88vw);
-      height: 100%;
-      background: var(--bg-panel);
-      border-left: 1px solid var(--border-color);
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      overflow-y: auto;
+      width: min(320px, 88vw); height: 100%; background: var(--bg-panel);
+      border-left: 1px solid var(--border-color); padding: 18px;
+      display: flex; flex-direction: column; gap: 12px; overflow-y: auto;
     }
     .drawer-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border-color);
     }
-    .drawer-user {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .drawer-user { display: flex; align-items: center; gap: 10px; }
     .drawer-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 40px; height: 40px; border-radius: 10px;
       background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
-      display: grid;
-      place-items: center;
-      font-size: 1.25rem;
+      display: grid; place-items: center; font-size: 1.25rem;
     }
-    .drawer-nav {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
+    .drawer-nav { display: flex; flex-direction: column; gap: 5px; }
     .drawer-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-main);
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 0.88rem;
-      font-weight: 600;
-      cursor: pointer;
-      text-align: left;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: transparent; border: 1px solid transparent; color: var(--text-main);
+      border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; font-weight: 600;
+      cursor: pointer; text-align: left;
     }
-    .drawer-item:hover,
-    .drawer-item.active {
-      background: rgba(56, 189, 248, 0.14);
-      border-color: rgba(56, 189, 248, 0.35);
+    .drawer-item:hover, .drawer-item.active {
+      background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.35);
     }
     .drawer-badge {
-      font-size: 0.7rem;
-      font-weight: 800;
-      padding: 2px 7px;
-      border-radius: 999px;
-      background: #f43f5e;
-      color: #fff;
+      font-size: 0.7rem; font-weight: 800; padding: 2px 7px;
+      border-radius: 999px; background: #f43f5e; color: #fff;
     }
 
-    /* Secciones internas */
-    .sec-head {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
+    .sec-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
     .sec-head h2 { font-size: 1.35rem; font-weight: 800; }
     .sec-sub { font-size: 0.86rem; color: var(--text-muted); }
 
-    .plans-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 14px;
-    }
+    .plans-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
     .plan-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 15px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 15px;
+      padding: 20px; display: flex; flex-direction: column; gap: 12px;
     }
-    .plan-card.current {
-      border-color: var(--accent-cyan);
-      box-shadow: 0 0 24px rgba(56, 189, 248, 0.2);
-    }
+    .plan-card.current { border-color: var(--accent-cyan); box-shadow: 0 0 24px rgba(56, 189, 248, 0.2); }
     .plan-price { font-size: 1.7rem; font-weight: 800; }
     .plan-price span { font-size: 0.82rem; color: var(--text-muted); font-weight: 500; }
-    .plan-list { list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 0.83rem; color: var(--text-muted); flex: 1; }
+    .plan-list {
+      list-style: none; display: flex; flex-direction: column; gap: 7px;
+      font-size: 0.83rem; color: var(--text-muted); flex: 1;
+    }
     .plan-list li::before { content: '✓ '; color: #4ade80; font-weight: 800; }
 
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-    }
-    .stat-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 13px;
-      padding: 16px;
-    }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 13px; padding: 16px; }
     .stat-card h3 { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; }
     .stat-big { font-size: 1.65rem; font-weight: 800; color: var(--accent-cyan); }
     .stat-detail { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
 
-    .ach-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 12px;
-    }
+    .ach-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
     .ach-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 14px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      opacity: 0.52;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px;
+      padding: 14px; display: flex; gap: 12px; align-items: center; opacity: 0.52;
     }
     .ach-card.unlocked {
-      opacity: 1;
-      border-color: rgba(250, 204, 21, 0.45);
+      opacity: 1; border-color: rgba(250, 204, 21, 0.45);
       background: linear-gradient(135deg, rgba(250, 204, 21, 0.08), var(--bg-card));
     }
     .ach-icon { font-size: 1.7rem; }
 
     .msg-list { display: flex; flex-direction: column; gap: 10px; }
     .msg-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 14px;
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px;
+      padding: 14px; display: flex; gap: 12px; align-items: flex-start;
     }
     .msg-card.unread { border-left: 4px solid var(--accent-cyan); }
 
-    .theme-cards-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-      gap: 12px;
-    }
+    .theme-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
     .theme-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 13px;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 13px;
+      padding: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer;
     }
     .theme-card.active { border-color: var(--accent-cyan); box-shadow: 0 0 16px rgba(56, 189, 248, 0.25); }
     .theme-preview-pieces { display: flex; gap: 6px; height: 48px; }
     .theme-preview-pieces svg { width: 42px; height: 42px; }
 
     .settings-box {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 14px;
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px;
+      padding: 18px; display: flex; flex-direction: column; gap: 14px;
     }
     .setting-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);
     }
     .setting-row:last-child { border-bottom: none; padding-bottom: 0; }
     .avatar-picker { display: flex; gap: 6px; flex-wrap: wrap; }
     .avatar-opt {
-      width: 38px;
-      height: 38px;
-      border-radius: 9px;
-      border: 1px solid var(--border-color);
-      background: rgba(9, 13, 22, 0.65);
-      font-size: 1.15rem;
-      cursor: pointer;
+      width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border-color);
+      background: rgba(9, 13, 22, 0.65); font-size: 1.15rem; cursor: pointer;
     }
     .avatar-opt.selected { border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.2); }
 
-    .curriculum-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 12px;
-    }
+    .curriculum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
     .curr-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 13px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 13px;
+      padding: 16px; display: flex; flex-direction: column; gap: 8px;
     }
     .curr-card h3 { font-size: 0.96rem; }
     .curr-card p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; }
     .curr-pill {
-      align-self: flex-start;
-      font-size: 0.7rem;
-      font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.14);
-      color: var(--accent-cyan);
+      align-self: flex-start; font-size: 0.7rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 999px; background: rgba(56, 189, 248, 0.14); color: var(--accent-cyan);
     }
   `;
   document.head.appendChild(style);
 }
 
 export class AppShell {
-  constructor({ store, onLaunchGame, onVariantChange, onThemeSelect, getCurrentThemeId, getCurrentVariant, onSettingsChanged }) {
+  constructor({
+    store,
+    onLaunchGame,
+    onVariantChange,
+    onThemeSelect,
+    getCurrentThemeId,
+    getCurrentVariant,
+    onSettingsChanged,
+    onRenderPuzzles,
+    onRenderLearn
+  }) {
     ensureShellStyles();
     this.store = store;
     this.onLaunchGame = onLaunchGame;
@@ -480,6 +241,8 @@ export class AppShell {
     this.getCurrentThemeId = getCurrentThemeId;
     this.getCurrentVariant = getCurrentVariant;
     this.onSettingsChanged = onSettingsChanged;
+    this.onRenderPuzzles = onRenderPuzzles;
+    this.onRenderLearn = onRenderLearn;
 
     this.currentView = 'home';
     this._mountTopNav();
@@ -500,7 +263,6 @@ export class AppShell {
     const topbar = document.querySelector('.topbar');
     if (!topbar) return;
 
-    // Hacer clic en el logo regresa al Inicio
     const brand = topbar.querySelector('.brand');
     if (brand) {
       brand.style.cursor = 'pointer';
@@ -551,7 +313,7 @@ export class AppShell {
       const btn = e.target.closest('.variant-btn');
       if (!btn) return;
       const v = btn.dataset.variant;
-      if (this.onVariantChange) this.onVariantChange(v);
+      this.onVariantChange?.(v);
       this.syncVariantUI(v);
     });
   }
@@ -617,10 +379,10 @@ export class AppShell {
     this.drawerPanel.innerHTML = `
       <div class="drawer-head">
         <div class="drawer-user">
-          <div class="drawer-avatar">${profile.avatar}</div>
+          <div class="drawer-avatar">${esc(profile.avatar)}</div>
           <div>
-            <div style="font-weight:700;font-size:0.92rem">${profile.name}</div>
-            <div style="font-size:0.74rem;color:${plan.color};font-weight:700">${plan.badge} · ${profile.title}</div>
+            <div style="font-weight:700;font-size:0.92rem">${esc(profile.name)}</div>
+            <div style="font-size:0.74rem;color:${plan.color};font-weight:700">${plan.badge} · ${esc(profile.title)}</div>
           </div>
         </div>
         <button id="drawer-close" class="btn btn-ghost" style="padding:5px 9px">✕</button>
@@ -661,7 +423,7 @@ export class AppShell {
   }
 
   _applySettingsToDom() {
-    const { showCoords } = this.store.data.settings;
+    const showCoords = this.store.data.settings?.showCoords !== false;
     document.body.classList.toggle('hide-coords', !showCoords);
   }
 
@@ -681,7 +443,7 @@ export class AppShell {
       this.renderCurrentView();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      window.dispatchEvent(new Event('resize'));
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     }
   }
 
@@ -697,18 +459,19 @@ export class AppShell {
       subscription: () => this._renderSubscriptionView(),
       settings: () => this._renderSettingsView()
     };
-    const fn = views[this.currentView] || views.home;
-    fn();
+    (views[this.currentView] || views.home)();
   }
 
   _renderHome() {
     const { profile, stats, achievements } = this.store.data;
     const totalGames = stats.classic.played + stats.fischer960.played;
+    const hasPuzzles = typeof this.onRenderPuzzles === 'function';
+    const hasLearn = typeof this.onRenderLearn === 'function';
 
     this.viewRoot.innerHTML = `
       <div class="home-hero">
         <div>
-          <h2>${profile.avatar} Hola, ${profile.name}</h2>
+          <h2>${esc(profile.avatar)} Hola, ${esc(profile.name)}</h2>
           <p>Elige entre <strong>Ajedrez Clásico</strong> o <strong>Fischer 960</strong>, juega online con reloj sincronizado y revisa cada jugada con animaciones de combate y entrenador por voz.</p>
         </div>
         <div class="home-stats-mini">
@@ -726,7 +489,7 @@ export class AppShell {
             <span class="mode-card-tag">ACTIVO</span>
           </div>
           <h3>Ajedrez Clásico</h3>
-          <p>Formación tradicional oficial con tus animaciones de combate, 5 temas visuales y análisis hablado al terminar.</p>
+          <p>Formación tradicional oficial con animaciones de combate, 5 temas visuales y análisis hablado al terminar.</p>
           <span class="mode-card-cta">Jugar Clásico →</span>
         </button>
 
@@ -736,7 +499,7 @@ export class AppShell {
             <span class="mode-card-tag">ACTIVO</span>
           </div>
           <h3>Fischer 960 (Ajedrez Aleatorio)</h3>
-          <p>960 posiciones iniciales oficiales (Scharnagl #0–#959) con enroque 960 auténtico para entrenar creatividad pura.</p>
+          <p>960 posiciones iniciales oficiales (Scharnagl #0–#959) con enroque 960 auténtico.</p>
           <span class="mode-card-cta">Jugar Fischer 960 →</span>
         </button>
 
@@ -753,21 +516,21 @@ export class AppShell {
         <button class="mode-card" data-nav="puzzles">
           <div class="mode-card-top">
             <div class="mode-card-icon">🧩</div>
-            <span class="mode-card-tag soon">FASE 7</span>
+            <span class="mode-card-tag ${hasPuzzles ? '' : 'soon'}">${hasPuzzles ? 'ACTIVO' : 'FASE 7'}</span>
           </div>
           <h3>Problemas Tácticos</h3>
-          <p>Mates en 1, 2 y 3 jugadas, ataques dobles y sacrificios tanto en Ajedrez Clásico como en posiciones Fischer 960.</p>
-          <span class="mode-card-cta">Ver Zona de Problemas →</span>
+          <p>Mates forzados, ataques dobles y sacrificios tanto en Ajedrez Clásico como en Fischer 960.</p>
+          <span class="mode-card-cta">Abrir Problemas →</span>
         </button>
 
         <button class="mode-card" data-nav="learn">
           <div class="mode-card-top">
             <div class="mode-card-icon">🎓</div>
-            <span class="mode-card-tag soon">FASE 7</span>
+            <span class="mode-card-tag ${hasLearn ? '' : 'soon'}">${hasLearn ? 'ACTIVO' : 'FASE 7'}</span>
           </div>
           <h3>Aprender y Aperturas</h3>
-          <p>Guía para principiantes más laboratorio de Aperturas, Defensas y Gambitos explicados paso a paso con voz.</p>
-          <span class="mode-card-cta">Explorar Academia →</span>
+          <p>Fundamentos para principiantes y catálogo interactivo de Aperturas, Defensas y Gambitos con voz.</p>
+          <span class="mode-card-cta">Entrar a Academia →</span>
         </button>
 
         <button class="mode-card" data-launch="pvp">
@@ -794,11 +557,12 @@ export class AppShell {
     this.viewRoot.querySelectorAll('[data-launch]').forEach(btn => {
       btn.addEventListener('click', () => {
         const key = btn.dataset.launch;
-        if (key === 'classic-ai') this.onLaunchGame({ variant: 'classic', mode: 'ai-normal' });
-        else if (key === 'fischer-ai') this.onLaunchGame({ variant: 'fischer960', mode: 'ai-normal' });
-        else if (key === 'online') this.onLaunchGame({ variant: this.getCurrentVariant(), mode: 'online' });
-        else if (key === 'pvp') this.onLaunchGame({ variant: this.getCurrentVariant(), mode: 'pvp' });
+        const currVar = this.getCurrentVariant?.() || 'classic';
         this.navigate('play');
+        if (key === 'classic-ai') this.onLaunchGame?.({ variant: 'classic', mode: 'ai-normal' });
+        else if (key === 'fischer-ai') this.onLaunchGame?.({ variant: 'fischer960', mode: 'ai-normal' });
+        else if (key === 'online') this.onLaunchGame?.({ variant: currVar, mode: 'online' });
+        else if (key === 'pvp') this.onLaunchGame?.({ variant: currVar, mode: 'pvp' });
       });
     });
 
@@ -808,11 +572,17 @@ export class AppShell {
   }
 
   _renderPuzzlesHub() {
+    if (typeof this.onRenderPuzzles === 'function') {
+      this.viewRoot.innerHTML = `<div id="puzzles-mount"></div>`;
+      this.onRenderPuzzles(this.viewRoot.querySelector('#puzzles-mount'));
+      return;
+    }
+
     this.viewRoot.innerHTML = `
       <div class="sec-head">
         <div>
           <h2>🧩 Problemas Tácticos (Clásico y Fischer 960)</h2>
-          <p class="sec-sub">Módulo interactivo listo para activarse en la Fase 7 sobre este mismo tablero y con tus animaciones de ataque.</p>
+          <p class="sec-sub">Conecta puzzles.js desde main.js para activar el tablero interactivo de retos tácticos.</p>
         </div>
         <button class="btn btn-secondary" data-nav="home">← Volver al Inicio</button>
       </div>
@@ -820,17 +590,12 @@ export class AppShell {
         <div class="curr-card">
           <span class="curr-pill">CLÁSICO</span>
           <h3>Reto Diario · Mate en 2</h3>
-          <p>Encuentra la secuencia forzada y detona la animación de Jaque Mate. (3 diarios gratis / ilimitados en Pro).</p>
+          <p>Secuencias forzadas con animaciones de combate y explosión de Jaque Mate.</p>
         </div>
         <div class="curr-card">
           <span class="curr-pill">FISCHER 960</span>
           <h3>Táctica en Posiciones Asimétricas</h3>
-          <p>Entrena clavadas, ataques dobles y enroques tácticos donde la teoría clásica no aplica.</p>
-        </div>
-        <div class="curr-card">
-          <span class="curr-pill">MODO SUPERVIVENCIA</span>
-          <h3>Racha Táctica contra Reloj</h3>
-          <p>Resuelve problemas de dificultad creciente antes de cometer 3 fallos y sube tu puntuación táctica.</p>
+          <p>Clavadas, ataques dobles y remates en posiciones 960.</p>
         </div>
       </div>
     `;
@@ -838,34 +603,30 @@ export class AppShell {
   }
 
   _renderLearnHub() {
+    if (typeof this.onRenderLearn === 'function') {
+      this.viewRoot.innerHTML = `<div id="academy-mount"></div>`;
+      this.onRenderLearn(this.viewRoot.querySelector('#academy-mount'));
+      return;
+    }
+
     this.viewRoot.innerHTML = `
       <div class="sec-head">
         <div>
           <h2>🎓 Academia: Aprender, Aperturas, Defensas y Gambitos</h2>
-          <p class="sec-sub">Estructura preparada para la Fase 7: cada lección se reproducirá en el tablero interactivo con explicación hablada.</p>
+          <p class="sec-sub">Conecta academy.js desde main.js para activar las lecciones interactivas con voz.</p>
         </div>
         <button class="btn btn-secondary" data-nav="home">← Volver al Inicio</button>
       </div>
       <div class="curriculum-grid">
         <div class="curr-card">
-          <span class="curr-pill">PRINCIPIANTES · GRATIS</span>
+          <span class="curr-pill">PRINCIPIANTES</span>
           <h3>Fundamentos del Ajedrez y Reglas 960</h3>
-          <p>Cómo mueve cada pieza, valor relativo, jaque, ahogado y guía práctica del enroque clásico y enroque 960.</p>
+          <p>Movimiento de piezas, valor relativo, jaque y enroque clásico y 960.</p>
         </div>
         <div class="curr-card">
-          <span class="curr-pill">APERTURAS</span>
-          <h3>Apertura Italiana, Española (Ruy López) y Londres</h3>
-          <p>Planes típicos de desarrollo rápido, dominio del centro y ataques directos sobre el punto f7.</p>
-        </div>
-        <div class="curr-card">
-          <span class="curr-pill">DEFENSAS</span>
-          <h3>Defensa Siciliana, Francesa, Caro-Kann e India de Rey</h3>
-          <p>Cómo responder con Negras contra 1.e4 y 1.d4, estructuras de peones y contragolpes clave.</p>
-        </div>
-        <div class="curr-card">
-          <span class="curr-pill">GAMBITOS</span>
-          <h3>Gambito de Dama, Gambito de Rey y Gambito Evans</h3>
-          <p>Cuándo sacrificar un peón para abrir líneas y lanzar ataques fulminantes sobre el Rey enemigo.</p>
+          <span class="curr-pill">APERTURAS · DEFENSAS · GAMBITOS</span>
+          <h3>Italiana, Española, Siciliana, Francesa y Gambito de Dama</h3>
+          <p>Planes clave explicados jugada a jugada sobre el tablero.</p>
         </div>
       </div>
     `;
@@ -873,7 +634,7 @@ export class AppShell {
   }
 
   _renderThemesView() {
-    const activeId = this.getCurrentThemeId();
+    const activeId = this.getCurrentThemeId?.() || 'neon';
     const isPro = this.store.hasAccess('pro_themes');
     const freeIds = new Set(['neon', 'wood']);
 
@@ -895,7 +656,7 @@ export class AppShell {
                 ${t.renderPiece('Q', 'b')}
                 ${t.renderPiece('N', 'w')}
               </div>
-              <strong>${t.label}</strong>
+              <strong>${esc(t.label)}</strong>
               <span class="mode-card-tag ${locked ? 'soon' : ''}">
                 ${t.id === activeId ? 'ACTIVO' : (locked ? '🔒 PLAN PRO' : 'DISPONIBLE')}
               </span>
@@ -912,8 +673,7 @@ export class AppShell {
           this.navigate('subscription');
           return;
         }
-        const id = card.dataset.themePick;
-        this.onThemeSelect(id);
+        this.onThemeSelect?.(card.dataset.themePick);
         this.renderCurrentView();
       });
     });
@@ -941,7 +701,7 @@ export class AppShell {
             <div class="sec-sub">Se muestra en tu perfil y menú principal</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
-            <input id="prof-name-input" class="ctrl-select" type="text" maxlength="24" value="${profile.name}" />
+            <input id="prof-name-input" class="ctrl-select" type="text" maxlength="24" value="${esc(profile.name)}" />
             <button id="prof-save-btn" class="btn btn-primary">Guardar</button>
           </div>
         </div>
@@ -1007,8 +767,8 @@ export class AppShell {
             <div class="ach-card ${ok ? 'unlocked' : ''}">
               <div class="ach-icon">${a.icon}</div>
               <div>
-                <div style="font-weight:700;font-size:0.9rem">${a.title} ${ok ? '✓' : '🔒'}</div>
-                <div class="sec-sub">${a.desc}</div>
+                <div style="font-weight:700;font-size:0.9rem">${esc(a.title)} ${ok ? '✓' : '🔒'}</div>
+                <div class="sec-sub">${esc(a.desc)}</div>
               </div>
             </div>
           `;
@@ -1019,7 +779,7 @@ export class AppShell {
   }
 
   _renderMessagesView() {
-    const msgs = this.store.data.messages;
+    const msgs = this.store.data.messages || [];
     this.viewRoot.innerHTML = `
       <div class="sec-head">
         <div>
@@ -1031,13 +791,13 @@ export class AppShell {
       <div class="msg-list">
         ${msgs.map(m => `
           <div class="msg-card ${m.read ? '' : 'unread'}">
-            <div style="font-size:1.5rem">${m.icon || '📩'}</div>
+            <div style="font-size:1.5rem">${esc(m.icon || '📩')}</div>
             <div style="flex:1">
               <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px">
-                <strong>${m.title}</strong>
-                <span class="sec-sub">${m.date}</span>
+                <strong>${esc(m.title)}</strong>
+                <span class="sec-sub">${esc(m.date)}</span>
               </div>
-              <p class="sec-sub" style="color:var(--text-main);opacity:0.86">${m.body}</p>
+              <p class="sec-sub" style="color:var(--text-main);opacity:0.86">${esc(m.body)}</p>
             </div>
           </div>
         `).join('')}
@@ -1052,7 +812,7 @@ export class AppShell {
       <div class="sec-head">
         <div>
           <h2>👑 Planes de Suscripción</h2>
-          <p class="sec-sub">Aplicación gratuita con mejoras opcionales. En esta versión web puedes alternar planes libremente para probar la experiencia antes de conectar Google Play y App Store.</p>
+          <p class="sec-sub">Aplicación gratuita con mejoras opcionales. Puedes alternar planes aquí para probar la experiencia antes de conectar Google Play y App Store.</p>
         </div>
         <button class="btn btn-secondary" data-nav="home">← Inicio</button>
       </div>
@@ -1062,15 +822,15 @@ export class AppShell {
           return `
             <div class="plan-card ${isCurrent ? 'current' : ''}">
               <div style="display:flex;justify-content:space-between;align-items:center">
-                <h3 style="color:${p.color}">${p.name}</h3>
+                <h3 style="color:${p.color}">${esc(p.name)}</h3>
                 <span class="mode-card-tag" style="color:${p.color};background:rgba(255,255,255,0.06)">${p.badge}</span>
               </div>
-              <div class="plan-price">${p.price} <span>${p.period}</span></div>
+              <div class="plan-price">${esc(p.price)} <span>${esc(p.period)}</span></div>
               <ul class="plan-list">
-                ${p.perks.map(perk => `<li>${perk}</li>`).join('')}
+                ${p.perks.map(perk => `<li>${esc(perk)}</li>`).join('')}
               </ul>
               <button class="btn ${isCurrent ? 'btn-secondary' : 'btn-primary'}" data-pick-tier="${p.id}" ${isCurrent ? 'disabled' : ''}>
-                ${isCurrent ? '✓ Plan Activo (Simulador)' : `Probar Plan ${p.name}`}
+                ${isCurrent ? '✓ Plan Activo (Simulador)' : `Probar Plan ${esc(p.name)}`}
               </button>
             </div>
           `;
@@ -1126,7 +886,7 @@ export class AppShell {
     this.viewRoot.querySelector('[data-nav="home"]')?.addEventListener('click', () => this.navigate('home'));
     this.viewRoot.querySelector('#set-default-variant')?.addEventListener('change', (e) => {
       this.store.updateSettings({ defaultVariant: e.target.value });
-      if (this.onSettingsChanged) this.onSettingsChanged();
+      this.onSettingsChanged?.();
     });
     this.viewRoot.querySelector('#set-toggle-coords')?.addEventListener('click', () => {
       this.store.updateSettings({ showCoords: !this.store.data.settings.showCoords });
