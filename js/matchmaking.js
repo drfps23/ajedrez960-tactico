@@ -15,6 +15,15 @@ function cleanObj(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+function getTabSessionId() {
+  let id = sessionStorage.getItem('ajedrez960_tab_sid');
+  if (!id) {
+    id = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    sessionStorage.setItem('ajedrez960_tab_sid', id);
+  }
+  return id;
+}
+
 function ensureMatchmakingStyles() {
   if (document.querySelector('style[data-mm-css]')) return;
   const style = document.createElement('style');
@@ -62,23 +71,29 @@ function ensureMatchmakingStyles() {
 export function attachGlobalMatchmaking(app) {
   ensureMatchmakingStyles();
 
+  const myQueueId = getTabSessionId();
   let fb = null;
   let dbInitPromise = null;
+  let serverOffset = 0;
+
   let selectedVariant = 'classic';
   let selectedClock = '5+3';
 
   let searching = false;
+  let pairingBusy = false;
   let searchStartedAt = 0;
   let searchTimer = null;
   let myQueueRef = null;
-  let unsubQueue = null;
+  let unsubBucket = null;
 
   let activeMatch = null;
   let statusMessage = '';
   let showFallbackPractice = false;
   let topPlayers = [];
 
-  const getMyUid = () => {
+  const serverNow = () => Date.now() + serverOffset;
+
+  const getPlayerUid = () => {
     const s = app.auth?.session;
     if (s?.uid) return s.uid;
     let id = localStorage.getItem('ajedrez960_anon_uid');
@@ -104,6 +119,12 @@ export function attachGlobalMatchmaking(app) {
           const fbApp = existing.length ? existing[0] : appMod.initializeApp(FIREBASE_CONFIG);
           const db = dbMod.getDatabase(fbApp);
           fb = { db, mod: dbMod };
+
+          // Sincronizar desfase horario del dispositivo con el servidor de Firebase
+          dbMod.onValue(dbMod.ref(db, '.info/serverTimeOffset'), (s) => {
+            serverOffset = Number(s.val()) || 0;
+          });
+
           syncCloudPlayer();
           refreshLeaderboard();
           return fb;
@@ -114,10 +135,9 @@ export function attachGlobalMatchmaking(app) {
   };
 
   const syncCloudPlayer = async () => {
-    const ctx = fb;
-    if (!ctx) return;
-    const { db, mod } = ctx;
-    const uid = getMyUid();
+    if (!fb) return;
+    const { db, mod } = fb;
+    const uid = getPlayerUid();
     const prof = app.store.data.profile;
     try {
       await mod.set(mod.ref(db, `players/${uid}`), cleanObj({
@@ -126,7 +146,7 @@ export function attachGlobalMatchmaking(app) {
         avatar: prof.avatar || '♛',
         classicElo: getMyElo('classic'),
         f960Elo: getMyElo('fischer960'),
-        updatedAt: Date.now()
+        updatedAt: serverNow()
       }));
     } catch { /* ignorar */ }
   };
@@ -146,6 +166,7 @@ export function attachGlobalMatchmaking(app) {
     } catch { /* ignorar */ }
   };
 
+  // --- Puente directo con app.mp para heredar ELO, Reloj y Reacciones ---
   if (app.mp) {
     const origIsConn = app.mp.isConnected.bind(app.mp);
     app.mp.isConnected = () => Boolean(activeMatch) || origIsConn();
@@ -155,7 +176,7 @@ export function attachGlobalMatchmaking(app) {
       const { db, mod } = fb;
       mod.push(
         mod.ref(db, `matches/${activeMatch.id}/events`),
-        cleanObj({ ...payload, sender: getMyUid(), ts: Date.now() })
+        cleanObj({ ...payload, sender: myQueueId, ts: serverNow() })
       ).catch(() => {});
       return true;
     };
@@ -203,7 +224,6 @@ export function attachGlobalMatchmaking(app) {
     if (!fb) return;
 
     const { db, mod } = fb;
-    const myUid = getMyUid();
     const seen = new Set();
     const eventsRef = mod.ref(db, `matches/${matchId}/events`);
 
@@ -222,7 +242,7 @@ export function attachGlobalMatchmaking(app) {
       seen.add(key);
 
       const ev = snap.val();
-      if (!ev || ev.sender === myUid) return;
+      if (!ev || ev.sender === myQueueId) return;
 
       if (ev.type === 'move') {
         app._handleRemoteMove({ move: ev.move, remaining: ev.remaining });
@@ -247,10 +267,11 @@ export function attachGlobalMatchmaking(app) {
 
   const cancelSearch = async () => {
     searching = false;
+    pairingBusy = false;
     showFallbackPractice = false;
     statusMessage = '';
     if (searchTimer) { clearInterval(searchTimer); searchTimer = null; }
-    if (unsubQueue) { try { unsubQueue(); } catch { /* ignorar */ } unsubQueue = null; }
+    if (unsubBucket) { try { unsubBucket(); } catch { /* ignorar */ } unsubBucket = null; }
     if (myQueueRef && fb) {
       try { await fb.mod.remove(myQueueRef); } catch { /* ignorar */ }
       myQueueRef = null;
@@ -258,24 +279,11 @@ export function attachGlobalMatchmaking(app) {
     updateMatchmakingWidgets();
   };
 
-  const tryPairWithWaitingPlayer = async (bucket, maxDiff) => {
-    if (!fb || !searching) return false;
+  const tryClaimCandidate = async (bucket, candidate) => {
+    if (!fb || !searching || pairingBusy) return false;
+    pairingBusy = true;
+
     const { db, mod } = fb;
-    const myUid = getMyUid();
-    const myElo = getMyElo(selectedVariant);
-    const now = Date.now();
-
-    const snap = await mod.get(mod.ref(db, `queue/${bucket}`));
-    const entries = Object.values(snap.val() || {});
-    const candidate = entries.find(e =>
-      e &&
-      e.uid !== myUid &&
-      e.status === 'waiting' &&
-      (now - (e.ts || 0)) < 45000 &&
-      Math.abs((e.elo || 1200) - myElo) <= maxDiff
-    );
-    if (!candidate) return false;
-
     const matchId = `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
     const positionId = selectedVariant === 'classic' ? 518 : Math.floor(Math.random() * 960);
     const iAmWhite = Math.random() < 0.5;
@@ -284,22 +292,84 @@ export function attachGlobalMatchmaking(app) {
       variant: selectedVariant,
       clock: selectedClock,
       positionId,
-      whiteUid: iAmWhite ? myUid : candidate.uid,
-      blackUid: iAmWhite ? candidate.uid : myUid,
-      createdAt: Date.now()
+      whiteId: iAmWhite ? myQueueId : candidate.queueId,
+      blackId: iAmWhite ? candidate.queueId : myQueueId,
+      createdAt: serverNow()
     };
 
-    const candRef = mod.ref(db, `queue/${bucket}/${candidate.uid}`);
-    const tx = await mod.runTransaction(candRef, (cur) => {
-      if (!cur || cur.status !== 'waiting') return;
-      return { ...cur, status: 'matched', matchId, matchedBy: myUid };
-    });
+    try {
+      // 1. Escribir la partida PRIMERO para que exista antes de notificar al rival
+      await mod.set(mod.ref(db, `matches/${matchId}`), cleanObj(matchData));
 
-    if (!tx.committed) return false;
+      // 2. Reclamar al rival con transacción segura (sin abortar en caché null)
+      const candRef = mod.ref(db, `queue/${bucket}/${candidate.queueId}`);
+      const tx = await mod.runTransaction(candRef, (cur) => {
+        if (cur === null) return null;
+        if (cur.status !== 'waiting') return;
+        return { ...cur, status: 'matched', matchId, matchedBy: myQueueId };
+      });
 
-    await mod.set(mod.ref(db, `matches/${matchId}`), cleanObj(matchData));
-    await enterMatch(matchId, iAmWhite ? 'w' : 'b', matchData);
-    return true;
+      const finalVal = tx.snapshot?.val();
+      if (!tx.committed || !finalVal || finalVal.matchedBy !== myQueueId) {
+        mod.remove(mod.ref(db, `matches/${matchId}`)).catch(() => {});
+        pairingBusy = false;
+        return false;
+      }
+
+      await enterMatch(matchId, iAmWhite ? 'w' : 'b', matchData);
+      return true;
+    } catch {
+      mod.remove(mod.ref(db, `matches/${matchId}`)).catch(() => {});
+      pairingBusy = false;
+      return false;
+    }
+  };
+
+  const evaluateQueueSnapshot = async (bucket, queueObj) => {
+    if (!searching || !fb) return;
+    const { db, mod } = fb;
+    const entries = Object.values(queueObj || {});
+
+    // 1. Verificar si otro jugador ya nos emparejó
+    const mine = queueObj?.[myQueueId];
+    if (mine && mine.status === 'matched' && mine.matchId) {
+      let mData = (await mod.get(mod.ref(db, `matches/${mine.matchId}`))).val();
+      if (!mData) {
+        await new Promise(r => setTimeout(r, 300));
+        mData = (await mod.get(mod.ref(db, `matches/${mine.matchId}`))).val();
+      }
+      if (mData && searching) {
+        const myColor = mData.whiteId === myQueueId ? 'w' : 'b';
+        await enterMatch(mine.matchId, myColor, mData);
+      }
+      return;
+    }
+
+    if (pairingBusy) return;
+
+    // 2. Buscar rivales activos en la cola (ventana de 90s sincronizada con el servidor)
+    const now = serverNow();
+    const myElo = getMyElo(selectedVariant);
+    const sec = Math.floor((Date.now() - searchStartedAt) / 1000);
+    const maxDiff = sec < 8 ? 200 : sec < 16 ? 450 : 9999;
+
+    const others = entries.filter(e =>
+      e &&
+      e.queueId &&
+      e.queueId !== myQueueId &&
+      e.status === 'waiting' &&
+      (now - (e.ts || 0)) < 90000 &&
+      Math.abs((e.elo || 1200) - myElo) <= maxDiff
+    );
+
+    if (others.length === 0) return;
+
+    // Desempate determinista para evitar que ambos creen 2 partidas a la vez
+    others.sort((a, b) => Math.abs((a.elo || 1200) - myElo) - Math.abs((b.elo || 1200) - myElo));
+    const target = others[0];
+    if (myQueueId > target.queueId || sec >= 3) {
+      await tryClaimCandidate(bucket, target);
+    }
   };
 
   const startSearch = async () => {
@@ -313,50 +383,52 @@ export function attachGlobalMatchmaking(app) {
 
     const { db, mod } = ctx;
     const bucket = `${selectedVariant}_${selectedClock}`;
-    const myUid = getMyUid();
     const myElo = getMyElo(selectedVariant);
 
     searching = true;
+    pairingBusy = false;
     showFallbackPractice = false;
     searchStartedAt = Date.now();
-    statusMessage = `Buscando rival (${selectedVariant === 'classic' ? 'Clásico' : '960'} · ${selectedClock}) cerca de ${myElo} ELO...`;
+    statusMessage = `Conectando a la cola (${selectedVariant === 'classic' ? 'Clásico' : '960'} · ${selectedClock})...`;
     updateMatchmakingWidgets();
 
-    if (await tryPairWithWaitingPlayer(bucket, 150)) return;
-
-    myQueueRef = mod.ref(db, `queue/${bucket}/${myUid}`);
+    myQueueRef = mod.ref(db, `queue/${bucket}/${myQueueId}`);
     await mod.set(myQueueRef, {
-      uid: myUid,
+      queueId: myQueueId,
+      uid: getPlayerUid(),
       name: app.store.data.profile.name || 'Jugador',
       elo: myElo,
       status: 'waiting',
-      ts: Date.now()
+      ts: serverNow()
     });
     mod.onDisconnect(myQueueRef).remove().catch(() => {});
 
-    unsubQueue = mod.onValue(myQueueRef, async (snap) => {
-      const val = snap.val();
-      if (!val || val.status !== 'matched' || !val.matchId) return;
-      const mSnap = await mod.get(mod.ref(db, `matches/${val.matchId}`));
-      const mData = mSnap.val();
-      if (!mData) return;
-      const myColor = mData.whiteUid === myUid ? 'w' : 'b';
-      await enterMatch(val.matchId, myColor, mData);
+    // Escuchar toda la cola en vivo: emparejamiento instantáneo al entrar un rival
+    const bucketRef = mod.ref(db, `queue/${bucket}`);
+    let latestQueue = {};
+    unsubBucket = mod.onValue(bucketRef, (snap) => {
+      latestQueue = snap.val() || {};
+      evaluateQueueSnapshot(bucket, latestQueue);
     });
 
-    searchTimer = setInterval(async () => {
+    // Latido de presencia y actualización de contador cada 2 segundos
+    searchTimer = setInterval(() => {
       if (!searching) return;
       const sec = Math.floor((Date.now() - searchStartedAt) / 1000);
-      const maxDiff = sec < 8 ? 150 : sec < 16 ? 350 : 9999;
       if (sec >= 18) showFallbackPractice = true;
       statusMessage = sec < 8
-        ? `Buscando rival cerca de ${myElo} ELO (±150)... ${sec}s`
+        ? `Buscando rival cerca de ${myElo} ELO (±200)... ${sec}s`
         : sec < 16
-          ? `Ampliando búsqueda (±350 ELO)... ${sec}s`
+          ? `Ampliando búsqueda (±450 ELO)... ${sec}s`
           : `Buscando cualquier rival conectado en ${selectedClock}... ${sec}s`;
       updateMatchmakingWidgets();
-      await tryPairWithWaitingPlayer(bucket, maxDiff);
-    }, 3000);
+
+      // Mantener viva nuestra entrada en cola cada 10s
+      if (sec > 0 && sec % 10 === 0 && myQueueRef) {
+        mod.update(myQueueRef, { ts: serverNow() }).catch(() => {});
+      }
+      evaluateQueueSnapshot(bucket, latestQueue);
+    }, 2000);
   };
 
   const origRecord = app.store.recordGame.bind(app.store);
