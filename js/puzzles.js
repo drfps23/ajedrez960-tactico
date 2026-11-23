@@ -1,57 +1,44 @@
-import { Chess960Engine, FILES, PIECE_VALUES } from './engine.js';
+import { Chess960Engine, FILES } from './engine.js';
 import { CombatFX } from './fx.js';
 import { THEMES } from './themes.js';
 import { PUZZLE_LEVELS, PUZZLES } from './data/puzzles_data.js';
 
 const SOLVED_KEY = 'ajedrez960_puzzles_solved_v1';
+const EN_TO_ES = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
+const PIECE_SCORE = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
 
 function ensureTrainerStyles() {
   if (document.querySelector('style[data-trainer-css]')) return;
   const style = document.createElement('style');
   style.dataset.trainerCss = 'true';
   style.textContent = `
-    .tr-levels {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 8px; margin-bottom: 12px;
-    }
+    .tr-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-bottom: 12px; }
     .tr-level-btn {
       background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 11px;
       padding: 9px 12px; color: var(--text-main); cursor: pointer; text-align: left;
       display: flex; flex-direction: column; gap: 3px; transition: border-color 0.15s;
     }
     .tr-level-btn:hover { border-color: var(--accent-cyan); }
-    .tr-level-btn.active {
-      border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.14);
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
-    }
+    .tr-level-btn.active { border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.14); box-shadow: 0 0 14px rgba(56, 189, 248, 0.18); }
     .tr-level-btn strong { font-size: 0.82rem; }
     .tr-level-btn span { font-size: 0.7rem; color: var(--text-muted); }
     .tr-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .tr-layout {
-      display: grid; grid-template-columns: minmax(280px, 510px) minmax(260px, 1fr);
-      gap: 18px; align-items: start;
-    }
+    .tr-layout { display: grid; grid-template-columns: minmax(280px, 510px) minmax(260px, 1fr); gap: 18px; align-items: start; }
     .tr-board-wrap {
       position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 12px;
-      overflow: hidden; border: 3px solid var(--board-border);
-      box-shadow: var(--board-shadow); user-select: none;
+      overflow: hidden; border: 3px solid var(--board-border); box-shadow: var(--board-shadow); user-select: none;
     }
-    .tr-panel {
-      background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
-    }
+    .tr-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .tr-list { display: flex; flex-wrap: wrap; gap: 6px; }
     .tr-pill {
-      background: rgba(9, 13, 22, 0.7); color: var(--text-main);
-      border: 1px solid var(--border-color); border-radius: 8px;
-      padding: 6px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+      background: rgba(9, 13, 22, 0.7); color: var(--text-main); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 6px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
     }
     .tr-pill.active { border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.16); color: var(--accent-cyan); }
     .tr-pill.solved { border-color: rgba(34, 197, 94, 0.55); }
     .tr-feedback {
       background: rgba(9, 13, 22, 0.65); border: 1px solid var(--border-color);
-      border-left: 4px solid var(--accent-cyan); border-radius: 9px;
-      padding: 10px 12px; font-size: 0.84rem; line-height: 1.48;
+      border-left: 4px solid var(--accent-cyan); border-radius: 9px; padding: 10px 12px; font-size: 0.84rem; line-height: 1.48;
     }
     .tr-feedback.ok { border-left-color: #22c55e; color: #bbf7d0; }
     .tr-feedback.err { border-left-color: #f43f5e; color: #fecdd3; }
@@ -60,11 +47,9 @@ function ensureTrainerStyles() {
     .square.hint-sq { box-shadow: inset 0 0 0 3px #facc15; }
     .square.pz-wrong-sq { box-shadow: inset 0 0 0 3px #ef4444; background-color: rgba(239, 68, 68, 0.34) !important; }
     .pz-wrong-x {
-      position: absolute; top: 3px; right: 3px; z-index: 14;
-      width: 24px; height: 24px; border-radius: 50%;
-      background: #ef4444; color: #ffffff; font-weight: 900; font-size: 0.85rem;
-      display: grid; place-items: center; box-shadow: 0 2px 10px rgba(239, 68, 68, 0.75);
-      animation: pzShake 0.35s ease;
+      position: absolute; top: 3px; right: 3px; z-index: 14; width: 24px; height: 24px; border-radius: 50%;
+      background: #ef4444; color: #ffffff; font-weight: 900; font-size: 0.85rem; display: grid; place-items: center;
+      box-shadow: 0 2px 10px rgba(239, 68, 68, 0.75); animation: pzShake 0.35s ease;
     }
     @keyframes pzShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
     @media (max-width: 860px) { .tr-layout { grid-template-columns: 1fr; } }
@@ -74,12 +59,12 @@ function ensureTrainerStyles() {
 
 function loadFenIntoEngine(fen) {
   const eng = new Chess960Engine(518);
-  const parts = fen.trim().split(/\s+/);
-  const rows = parts[0].split('/');
+  const parts = String(fen || '').trim().split(/\s+/);
+  const rows = (parts[0] || '').split('/');
   eng.board = Array.from({ length: 8 }, () => new Array(8).fill(null));
   for (let r = 0; r < 8; r++) {
     let c = 0;
-    for (const ch of rows[r]) {
+    for (const ch of (rows[r] || '')) {
       if (ch >= '1' && ch <= '8') c += parseInt(ch, 10);
       else {
         eng.board[r][c] = { color: ch === ch.toUpperCase() ? 'w' : 'b', type: ch.toUpperCase() };
@@ -110,6 +95,11 @@ function uciToCoords(uci) {
   };
 }
 
+function moveToUci(m) {
+  const destC = m.castle ? m.kingToCol : m.to.c;
+  return `${FILES[m.from.c]}${8 - m.from.r}${FILES[destC]}${8 - m.to.r}${m.promo ? m.promo.toLowerCase() : ''}`;
+}
+
 function findLegalMoveByUci(engine, uci) {
   if (!uci || uci.length < 4) return null;
   const exp = uciToCoords(uci);
@@ -120,14 +110,185 @@ function findLegalMoveByUci(engine, uci) {
     (!exp.promo || m.promo === exp.promo)
   );
   if (direct) return direct;
-
-  // Enroque en UCI (ej. e1g1 o e1h1)
   const p = engine.board[exp.from.r]?.[exp.from.c];
   if (p && p.type === 'K' && Math.abs(exp.to.c - exp.from.c) >= 2) {
-    const side = exp.to.c > exp.from.c ? 'K' : 'Q';
-    return legal.find(m => m.castle === side) || null;
+    return legal.find(m => m.castle === (exp.to.c > exp.from.c ? 'K' : 'Q')) || null;
   }
   return null;
+}
+
+function cleanSan(s) {
+  return String(s || '').replace(/[+#!?=]/g, '').replace(/0/g, 'O').trim();
+}
+
+function enSanToEs(tok) {
+  let s = String(tok || '').replace(/^\d+\.+/, '').replace(/[+#!?]/g, '').replace(/0/g, 'O').trim();
+  if (!s || s.startsWith('O-O')) return s;
+  if (EN_TO_ES[s[0]]) s = EN_TO_ES[s[0]] + s.slice(1);
+  s = s.replace(/=([KQRBN])/, (_, p) => EN_TO_ES[p] || p);
+  return s.replace(/=/g, '');
+}
+
+async function fetchInfiniteOnlinePuzzle(level, solvedSet) {
+  const minPlies = level >= 3 ? 3 : 1;
+  let fallback = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`https://api.chess.com/pub/puzzle/random?t=${Date.now()}_${attempt}`);
+    if (!res.ok) continue;
+    const data = await res.json();
+    if (!data?.fen || !data?.pgn) continue;
+
+    const pid = `inf_cc_${data.publish_time || Math.random().toString(36).slice(2, 8)}`;
+    const tokens = data.pgn
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\{[^}]*\}/g, ' ')
+      .replace(/\([^)]*\)/g, ' ')
+      .split(/\s+/)
+      .map(t => t.replace(/^\d+\.+/, '').trim())
+      .filter(t => t && !/^(1-0|0-1|1\/2-1\/2|\*)$/.test(t));
+
+    if (!tokens.length) continue;
+
+    const sim = loadFenIntoEngine(data.fen);
+    const solution = [];
+    let valid = true;
+
+    for (const tok of tokens) {
+      const want = enSanToEs(tok);
+      const match = sim.getLegalMoves(sim.turn).find(m => cleanSan(sim.clone().makeMove(m).san) === want);
+      if (!match) { valid = false; break; }
+      solution.push(moveToUci(match));
+      sim.makeMove(match);
+    }
+    if (!valid || !solution.length) continue;
+
+    const lvlObj = PUZZLE_LEVELS.find(l => l.id === level) || PUZZLE_LEVELS[0];
+    const obj = {
+      id: pid,
+      isLive: true,
+      isInfinite: true,
+      level,
+      variant: 'classic',
+      title: data.title ? `∞ ${data.title}` : `∞ Reto Táctico (${lvlObj.elo})`,
+      theme: `∞ Reto Infinito · ${Math.ceil(solution.length / 2)} jug.`,
+      fen: data.fen,
+      solution,
+      hint: 'Calcula primero los jaques forzados, capturas y amenazas dobles.',
+      explanation: `¡Reto infinito superado! Combinación de ${Math.ceil(solution.length / 2)} jugada(s) exacta.`
+    };
+    fallback = obj;
+    if (!solvedSet.has(pid) && solution.length >= minPlies) return obj;
+  }
+  return fallback;
+}
+
+function generateOfflineInfinitePuzzle(level, variant = 'classic') {
+  const mirror = Math.random() < 0.5;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const flipR = (r) => (mirror ? 7 - r : r);
+  const myC = mirror ? 'b' : 'w';
+  const oppC = mirror ? 'w' : 'b';
+  const toUci = (fr, fc, tr, tc) => `${FILES[fc]}${8 - fr}${FILES[tc]}${8 - tr}`;
+  const is960 = variant === 'fischer960';
+  const id = `inf_gen_${level}_${Date.now().toString(36)}`;
+
+  const toFen = (pieces) => {
+    const g = Array.from({ length: 8 }, () => new Array(8).fill(null));
+    pieces.forEach(p => { g[p.r][p.c] = { color: p.color, type: p.type }; });
+    return g.map(row => {
+      let s = '', e = 0;
+      for (const cell of row) {
+        if (!cell) e++;
+        else { if (e) { s += e; e = 0; } s += cell.color === 'w' ? cell.type : cell.type.toLowerCase(); }
+      }
+      return s + (e || '');
+    }).join('/') + ` ${myC} - - 0 1`;
+  };
+
+  if (level <= 1) {
+    const right = Math.random() < 0.5;
+    const kCol = right ? 6 : 1;
+    const pCols = right ? [5, 6, 7] : [0, 1, 2];
+    const rCol = pick(right ? [0, 1, 2, 3, 4] : [3, 4, 5, 6, 7]);
+    const pieces = [
+      { r: flipR(0), c: kCol, color: oppC, type: 'K' },
+      ...pCols.map(c => ({ r: flipR(1), c, color: oppC, type: 'P' })),
+      { r: flipR(7), c: kCol, color: myC, type: 'K' },
+      ...pCols.map(c => ({ r: flipR(6), c, color: myC, type: 'P' })),
+      { r: flipR(7), c: rCol, color: myC, type: 'R' }
+    ];
+    return {
+      id, isLive: true, isInfinite: true, level: 1, variant,
+      title: `∞ Pasillo Aleatorio (${myC === 'w' ? 'Blancas' : 'Negras'})`,
+      theme: is960 ? '∞ Mate en 1 · 960' : '∞ Mate en 1 · Nivel 1',
+      fen: toFen(pieces),
+      solution: [toUci(flipR(7), rCol, flipR(0), rCol)],
+      hint: 'El Rey rival está encerrado detrás de sus peones en la última fila.',
+      explanation: 'La Torre entra hasta la última fila dando jaque mate inmediato.'
+    };
+  }
+
+  if (level === 2 || level === 3) {
+    const right = Math.random() < 0.5;
+    const kCol = right ? 6 : 1;
+    const pCols = right ? [5, 6, 7] : [0, 1, 2];
+    const atkCol = pick([3, 4]);
+    const defCol = right ? pick([0, 1, 2]) : pick([5, 6, 7]);
+    const pieces = [
+      { r: flipR(0), c: kCol, color: oppC, type: 'K' },
+      { r: flipR(0), c: defCol, color: oppC, type: 'R' },
+      ...pCols.map(c => ({ r: flipR(1), c, color: oppC, type: 'P' })),
+      { r: flipR(7), c: kCol, color: myC, type: 'K' },
+      ...pCols.map(c => ({ r: flipR(6), c, color: myC, type: 'P' })),
+      { r: flipR(6), c: atkCol, color: myC, type: 'Q' },
+      { r: flipR(7), c: atkCol, color: myC, type: 'R' }
+    ];
+    return {
+      id, isLive: true, isInfinite: true, level, variant,
+      title: `∞ Desviación Dinámica (${myC === 'w' ? 'Blancas' : 'Negras'})`,
+      theme: is960 ? '∞ Mate en 2 · 960' : `∞ Mate en 2 · Nivel ${level}`,
+      fen: toFen(pieces),
+      solution: [
+        toUci(flipR(6), atkCol, flipR(0), atkCol),
+        toUci(flipR(0), defCol, flipR(0), atkCol),
+        toUci(flipR(7), atkCol, flipR(0), atkCol)
+      ],
+      hint: 'Sacrifica la Dama en la última fila para desviar a la Torre defensora.',
+      explanation: 'Al capturar la Dama, la Torre defensora abandona la fila y rematas con tu Torre.'
+    };
+  }
+
+  const pieces = [
+    { r: flipR(0), c: 6, color: oppC, type: 'K' },
+    { r: flipR(0), c: 0, color: oppC, type: 'R' },
+    { r: flipR(0), c: 2, color: oppC, type: 'R' },
+    { r: flipR(1), c: 5, color: oppC, type: 'P' },
+    { r: flipR(1), c: 6, color: oppC, type: 'P' },
+    { r: flipR(1), c: 7, color: oppC, type: 'P' },
+    { r: flipR(7), c: 6, color: myC, type: 'K' },
+    { r: flipR(6), c: 5, color: myC, type: 'P' },
+    { r: flipR(6), c: 6, color: myC, type: 'P' },
+    { r: flipR(6), c: 7, color: myC, type: 'P' },
+    { r: flipR(4), c: 4, color: myC, type: 'Q' },
+    { r: flipR(6), c: 4, color: myC, type: 'R' },
+    { r: flipR(7), c: 4, color: myC, type: 'R' }
+  ];
+  return {
+    id, isLive: true, isInfinite: true, level: 4, variant,
+    title: `∞ Demolición Triple (${myC === 'w' ? 'Blancas' : 'Negras'})`,
+    theme: is960 ? '∞ Mate en 3 · 960' : '∞ Mate en 3 · Nivel 4',
+    fen: toFen(pieces),
+    solution: [
+      toUci(flipR(4), 4, flipR(0), 4),
+      toUci(flipR(0), 2, flipR(0), 4),
+      toUci(flipR(6), 4, flipR(0), 4),
+      toUci(flipR(0), 0, flipR(0), 4),
+      toUci(flipR(7), 4, flipR(0), 4)
+    ],
+    hint: 'Lanza tus tres piezas pesadas en cadena sobre la columna e.',
+    explanation: 'Sacrificas Dama y primera Torre para eliminar ambas defensas y dar mate.'
+  };
 }
 
 export class PuzzleTrainer {
@@ -140,6 +301,7 @@ export class PuzzleTrainer {
     this.solved = this._loadSolved();
     this.fx = null;
     this.busy = false;
+    this.loadingInfinite = false;
     this.playerColor = 'w';
     this.hidden = new Set();
     this.hintSquares = new Set();
@@ -170,9 +332,7 @@ export class PuzzleTrainer {
   }
 
   _filteredList() {
-    return PUZZLES.filter(p =>
-      p.level === this.level && (this.filter === 'all' || p.variant === this.filter)
-    );
+    return PUZZLES.filter(p => p.level === this.level && (this.filter === 'all' || p.variant === this.filter));
   }
 
   _startPuzzleObject(p) {
@@ -199,13 +359,31 @@ export class PuzzleTrainer {
   }
 
   loadPuzzle(id) {
-    const p = PUZZLES.find(item => item.id === id) || PUZZLES[0];
-    this._startPuzzleObject(p);
+    this._startPuzzleObject(PUZZLES.find(item => item.id === id) || PUZZLES[0]);
   }
 
   loadExternalPuzzle(puzzleObj) {
-    if (!puzzleObj) return;
-    this._startPuzzleObject(puzzleObj);
+    if (puzzleObj) this._startPuzzleObject(puzzleObj);
+  }
+
+  async loadInfinitePuzzle() {
+    if (this.loadingInfinite) return;
+    this.loadingInfinite = true;
+    const btn = this.container?.querySelector('#pz-infinite');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando reto...'; }
+
+    let nextObj = null;
+    try {
+      if (this.filter !== 'fischer960') {
+        nextObj = await fetchInfiniteOnlinePuzzle(this.level, this.solved);
+      }
+    } catch { /* respaldo offline */ }
+
+    if (!nextObj) {
+      nextObj = generateOfflineInfinitePuzzle(this.level, this.filter === 'fischer960' ? 'fischer960' : 'classic');
+    }
+    this.loadingInfinite = false;
+    this._startPuzzleObject(nextObj);
   }
 
   _renderScaffold() {
@@ -219,7 +397,7 @@ export class PuzzleTrainer {
       <div class="sec-head" style="margin-bottom:12px">
         <div>
           <h2>🧩 Problemas Tácticos (${this.solved.size} resueltos)</h2>
-          <p class="sec-sub">4 niveles progresivos + Problema del Día en vivo. Si fallas, el rival castiga tu jugada.</p>
+          <p class="sec-sub">4 niveles progresivos + Modo Infinito inagotable. Si fallas, Stockfish castiga tu jugada.</p>
         </div>
         <button class="btn btn-secondary" id="pz-home">← Inicio</button>
       </div>
@@ -230,9 +408,9 @@ export class PuzzleTrainer {
           const doneInLvl = allInLvl.filter(x => this.solved.has(x.id)).length;
           const locked = l.proOnly && !isPro;
           return `
-            <button class="tr-level-btn ${!this.puzzle.isLive && this.level === l.id ? 'active' : ''}" data-lvl="${l.id}" data-locked="${locked}">
+            <button class="tr-level-btn ${this.level === l.id ? 'active' : ''}" data-lvl="${l.id}" data-locked="${locked}">
               <strong>${locked ? '🔒 ' : ''}${l.name}</strong>
-              <span>ELO ${l.elo} · ${doneInLvl}/${allInLvl.length} resueltos</span>
+              <span>ELO ${l.elo} · ${doneInLvl}/${allInLvl.length} base + ∞</span>
             </button>
           `;
         }).join('')}
@@ -242,6 +420,7 @@ export class PuzzleTrainer {
         <button class="tr-pill ${this.filter === 'all' ? 'active' : ''}" data-f="all">Todos</button>
         <button class="tr-pill ${this.filter === 'classic' ? 'active' : ''}" data-f="classic">♟ Clásico</button>
         <button class="tr-pill ${this.filter === 'fischer960' ? 'active' : ''}" data-f="fischer960">🎲 Fischer 960</button>
+        <button class="btn btn-primary" id="pz-infinite" style="margin-left:auto">∞ Nuevo Reto Infinito</button>
       </div>
 
       <div class="tr-list" style="margin-bottom:16px">
@@ -268,7 +447,7 @@ export class PuzzleTrainer {
           <div class="tr-actions">
             <button class="btn btn-secondary" id="pz-hint">💡 Pista</button>
             <button class="btn btn-secondary" id="pz-retry">🔄 Reiniciar</button>
-            <button class="btn btn-primary" id="pz-next">Siguiente →</button>
+            <button class="btn btn-primary" id="pz-next">${this.puzzle.isInfinite ? '∞ Siguiente Reto →' : 'Siguiente →'}</button>
           </div>
         </div>
       </div>
@@ -281,16 +460,19 @@ export class PuzzleTrainer {
     if (theme) this.fx.setPalette(theme.fxPalette);
 
     this.container.querySelector('#pz-home').addEventListener('click', () => this.app.shell.navigate('home'));
+    this.container.querySelector('#pz-infinite').addEventListener('click', () => this.loadInfinitePuzzle());
     this.container.querySelectorAll('[data-lvl]').forEach(b => b.addEventListener('click', () => {
       if (b.dataset.locked === 'true') { this.app.shell.navigate('subscription'); return; }
       this.level = Number(b.dataset.lvl);
-      const next = this._filteredList()[0] || PUZZLES.find(x => x.level === this.level);
-      if (next) this.loadPuzzle(next.id);
+      const pending = this._filteredList().find(x => !this.solved.has(x.id));
+      if (pending) this.loadPuzzle(pending.id);
+      else this.loadInfinitePuzzle();
     }));
     this.container.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
       this.filter = b.dataset.f;
       const next = this._filteredList()[0];
       if (next) this.loadPuzzle(next.id);
+      else this.loadInfinitePuzzle();
     }));
     this.container.querySelectorAll('[data-pid]').forEach(b => b.addEventListener('click', () => {
       this.loadPuzzle(b.dataset.pid);
@@ -303,18 +485,11 @@ export class PuzzleTrainer {
     });
     this.container.querySelector('#pz-retry').addEventListener('click', () => this._startPuzzleObject(this.puzzle));
     this.container.querySelector('#pz-next').addEventListener('click', () => {
+      if (this.puzzle.isInfinite) { this.loadInfinitePuzzle(); return; }
       const items = this._filteredList();
       const idx = items.findIndex(x => x.id === this.puzzle.id);
-      if (idx >= 0 && idx + 1 < items.length) {
-        this.loadPuzzle(items[idx + 1].id);
-      } else {
-        const nextLvl = this.level < 4 ? this.level + 1 : 1;
-        const lvlObj = PUZZLE_LEVELS.find(l => l.id === nextLvl);
-        if (lvlObj?.proOnly && !isPro) { this.app.shell.navigate('subscription'); return; }
-        this.level = nextLvl;
-        const first = this._filteredList()[0] || PUZZLES.find(x => x.level === nextLvl);
-        if (first) this.loadPuzzle(first.id);
-      }
+      if (idx >= 0 && idx + 1 < items.length) this.loadPuzzle(items[idx + 1].id);
+      else this.loadInfinitePuzzle();
     });
 
     this._renderBoard();
@@ -357,7 +532,6 @@ export class PuzzleTrainer {
     const legal = this.engine.getLegalMoves(this.engine.turn);
     if (!legal.length) return null;
 
-    // 1. Priorizar refutación real de Stockfish (rápida ~180 ms)
     if (this.app.stockfish) {
       try {
         const ok = await this.app.stockfish.init();
@@ -365,10 +539,9 @@ export class PuzzleTrainer {
           const res = await this.app.stockfish.evaluatePosition(this.engine, { skill: 20, depth: 7, movetime: 180 });
           if (res?.move) return res.move;
         }
-      } catch { /* usar respaldo local */ }
+      } catch { /* respaldo local */ }
     }
 
-    // 2. Respaldo táctico inmediato si estás offline: capturar pieza mal jugada, jaque o mejor captura
     const destC = wrongMove.castle ? wrongMove.kingToCol : wrongMove.to.c;
     const captureBlunder = legal.find(m => m.to.r === wrongMove.to.r && m.to.c === destC);
     if (captureBlunder) return captureBlunder;
@@ -378,7 +551,7 @@ export class PuzzleTrainer {
     for (const m of legal) {
       const sim = this.engine.clone();
       const rec = sim.makeMove(m);
-      let s = (rec.captured ? (PIECE_VALUES[rec.captured] || 100) : 0) + (rec.inCheck ? 150 : 0);
+      let s = (rec.captured ? (PIECE_SCORE[rec.captured] || 100) : 0) + (rec.inCheck ? 150 : 0);
       if (sim.status === 'checkmate') s += 9999;
       if (s > bestScore) { bestScore = s; best = m; }
     }
@@ -397,12 +570,7 @@ export class PuzzleTrainer {
 
     this._playAnimatedMove(wrongMove, async () => {
       if (token !== this._runToken) return;
-
-      // Si el rival tiene respuesta legal, mostrar su escapatoria o captura en vivo
-      const refutation = this.engine.status === 'playing'
-        ? await this._findRefutationMove(wrongMove)
-        : null;
-
+      const refutation = this.engine.status === 'playing' ? await this._findRefutationMove(wrongMove) : null;
       if (token !== this._runToken) return;
 
       const revert = () => {
@@ -464,6 +632,8 @@ export class PuzzleTrainer {
         this.done = true;
         this._markSolved(this.puzzle.id);
         this._setFeedback('ok', `✓ ¡Resuelto! ${this.puzzle.explanation || 'Combinación ejecutada con precisión.'}`);
+        const h2 = this.container?.querySelector('.sec-head h2');
+        if (h2) h2.textContent = `🧩 Problemas Tácticos (${this.solved.size} resueltos)`;
         this._renderBoard();
         return;
       }
