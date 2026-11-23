@@ -1,4 +1,14 @@
 import { Chess960Engine, PIECE_VALUES } from './engine.js';
+import { CLASS_META } from './analyzer.js';
+import { detectOpening } from './openings.js';
+
+// Añadir categoría "Libro" al catálogo global compartido con el tablero e historial
+CLASS_META.book = {
+  code: '📖',
+  label: 'Libro',
+  color: '#c084fc',
+  bg: 'rgba(192, 132, 252, 0.16)'
+};
 
 function sameMove(a, b) {
   if (!a || !b) return false;
@@ -59,7 +69,6 @@ export function attachStockfishAnalyzer(app) {
     const history = engine.history.map(h => ({ ...h }));
     const total = history.length;
 
-    // 1. Reconstruir las N+1 posiciones exactas
     const sim = new Chess960Engine(engine.positionId);
     const frames = [{ engine: sim.clone(), lastMove: null }];
     for (let i = 0; i < total; i++) {
@@ -69,7 +78,7 @@ export function attachStockfishAnalyzer(app) {
     analyzer.frames = frames;
     analyzer.results = [];
 
-    // 2. Evaluar cada posición una sola vez con Stockfish (N+1 llamadas)
+    // Evaluar cada posición con Stockfish a profundidad estable
     const evals = new Array(total + 1).fill(null);
     analyzer._renderProgress(0, total + 1);
 
@@ -86,7 +95,7 @@ export function attachStockfishAnalyzer(app) {
       } else if (eng.status !== 'playing') {
         evals[k] = { move: null, scoreCp: 0, mateIn: null };
       } else {
-        const res = await sf.evaluatePosition(eng, { skill: 20, depth: 10, movetime: 210 });
+        const res = await sf.evaluatePosition(eng, { skill: 20, depth: 11, movetime: 250 });
         if (token !== analyzer._runToken) return;
         evals[k] = res || { move: null, scoreCp: 0, mateIn: null };
       }
@@ -96,12 +105,11 @@ export function attachStockfishAnalyzer(app) {
 
     if (token !== analyzer._runToken) return;
 
-    // 3. Clasificar cada jugada con criterios calibrados de Stockfish
     const wDrops = [];
     const bDrops = [];
     const counts = {
-      brilliant: 0, best: 0, excellent: 0, good: 0,
-      inaccuracy: 0, mistake: 0, blunder: 0
+      book: 0, brilliant: 0, best: 0, excellent: 0,
+      good: 0, inaccuracy: 0, mistake: 0, blunder: 0
     };
 
     for (let i = 0; i < total; i++) {
@@ -139,54 +147,75 @@ export function attachStockfishAnalyzer(app) {
         : Math.max(0, winPct(moverBefore) - winPct(moverAfter));
 
       const allowedMate = moverAfter < -90000 && moverBefore > -90000;
-      const missedMateToEqual = moverBefore > 90000 && moverAfter < 350;
-      const missedMateStillWinning = moverBefore > 90000 && moverAfter >= 350 && moverAfter < 90000;
+      const missedMateToEqual = moverBefore > 90000 && moverAfter < 320;
+      const missedMateStillWinning = moverBefore > 90000 && moverAfter >= 320 && moverAfter < 90000;
 
-      // Criterio estricto de jugada brillante: sacrificio real + prácticamente óptima
+      // 1. Detectar jugada teórica de Libro (solo Clásico, primeras 5 jugadas completas)
+      const openingHit = (engine.positionId === 518 && i < 10)
+        ? detectOpening(history.slice(0, i + 1))
+        : null;
+      const isBookMove = Boolean(openingHit && !allowedMate && winDrop <= 4.5 && !isMatePlayed);
+
+      // 2. Detectar si la posición ya estaba totalmente decidida o era jugada forzada
+      const alreadyWon = moverBefore >= 650 && moverAfter >= 550;
+      const alreadyLost = moverBefore <= -650 && moverAfter <= -550;
+      const isForced = legalMoves.length <= 1;
+
+      // 3. Criterio estricto de Brillante: sacrificio táctico genuino + jugada #1 exacta
       const destC = played.castle ? played.kingToCol : played.to.c;
       const destAttacked = !played.castle && afterEngine.isSquareAttacked(played.to.r, destC, enemy);
       const looksLikeSacrifice =
         !isMatePlayed &&
+        !isBookMove &&
+        !alreadyWon &&
+        !alreadyLost &&
+        isExactBest &&
         destAttacked &&
         played.piece !== 'P' &&
         played.piece !== 'K' &&
-        (!played.captured || (PIECE_VALUES[played.piece] || 0) > (PIECE_VALUES[played.captured] || 0) + 100) &&
-        Math.abs(evalBest) < 480 &&
-        moverAfter >= -30 &&
-        legalMoves.length >= 3;
+        (!played.captured || (PIECE_VALUES[played.piece] || 0) >= (PIECE_VALUES[played.captured] || 0) + 150) &&
+        Math.abs(evalBest) < 360 &&
+        moverAfter >= 40 &&
+        legalMoves.length >= 4;
 
       let classification = 'good';
       if (isMatePlayed) {
         classification = 'best';
-      } else if (allowedMate || missedMateToEqual || winDrop >= 22) {
+      } else if (isBookMove) {
+        classification = 'book';
+      } else if (allowedMate || missedMateToEqual || winDrop >= 24) {
         classification = 'blunder';
-      } else if (missedMateStillWinning || winDrop >= 11) {
+      } else if (missedMateStillWinning || winDrop >= 11.5) {
         classification = 'mistake';
-      } else if (winDrop >= 5.5) {
+      } else if (winDrop >= 5.8) {
         classification = 'inaccuracy';
-      } else if (winDrop <= 1.8 && looksLikeSacrifice) {
+      } else if (looksLikeSacrifice && winDrop <= 0.5) {
         classification = 'brilliant';
-      } else if (isExactBest || winDrop <= 1.4) {
+      } else if (isForced) {
+        classification = 'good';
+      } else if (isExactBest && !alreadyWon && !alreadyLost) {
         classification = 'best';
-      } else if (winDrop <= 3.2) {
+      } else if (winDrop <= 2.2 && cpLoss <= 40) {
         classification = 'excellent';
       } else {
         classification = 'good';
       }
 
-      const comment = analyzer._buildCoachComment({
-        classification,
-        beforeEngine,
-        afterPlayed: afterEngine,
-        played,
-        bestMove,
-        bestSan,
-        bestRecord,
-        missedMate: missedMateToEqual || missedMateStillWinning,
-        allowedMate,
-        isExactBest,
-        looksLikeSacrifice
-      });
+      const comment = classification === 'book'
+        ? `Jugada teórica de ${openingHit.name}. Sigue líneas probadas de apertura.`
+        : analyzer._buildCoachComment({
+            classification,
+            beforeEngine,
+            afterPlayed: afterEngine,
+            played,
+            bestMove,
+            bestSan,
+            bestRecord,
+            missedMate: missedMateToEqual || missedMateStillWinning,
+            allowedMate,
+            isExactBest,
+            looksLikeSacrifice
+          });
 
       analyzer.results.push({
         played,
@@ -201,8 +230,10 @@ export function attachStockfishAnalyzer(app) {
       });
 
       counts[classification]++;
-      if (color === 'w') wDrops.push(winDrop);
-      else bDrops.push(winDrop);
+      if (!isBookMove) {
+        if (color === 'w') wDrops.push(winDrop);
+        else bDrops.push(winDrop);
+      }
     }
 
     analyzer.analyzing = false;
@@ -220,7 +251,7 @@ export function attachStockfishAnalyzer(app) {
     analyzer.goToPly(1);
   };
 
-  // Ocultar botón manual amarillo cuando el análisis ya vino automático de Stockfish
+  // Mostrar resumen completo calibrado y retirar el botón manual amarillo
   const origRenderPanel = analyzer._renderReviewPanel.bind(analyzer);
   analyzer._renderReviewPanel = () => {
     origRenderPanel();
@@ -230,11 +261,24 @@ export function attachStockfishAnalyzer(app) {
     const manualBtn = box.querySelector('#sf-deep-btn');
     if (manualBtn) manualBtn.parentElement?.remove();
 
+    const counts = analyzer.summary?.counts;
+    const countsEl = box.querySelector('.an-counts');
+    if (counts && countsEl) {
+      const order = ['book', 'brilliant', 'best', 'excellent', 'good', 'inaccuracy', 'mistake', 'blunder'];
+      countsEl.innerHTML = order
+        .filter(k => (counts[k] || 0) > 0)
+        .map(k => {
+          const m = CLASS_META[k];
+          return `<span class="an-chip" title="${m.label}" style="color:${m.color};background:${m.bg};border-color:${m.color}44">${m.code} ${counts[k]}</span>`;
+        })
+        .join('');
+    }
+
     if (!box.querySelector('.sf-auto-tag')) {
       const tag = document.createElement('div');
       tag.className = 'sf-auto-tag';
       tag.style.cssText = 'font-size:0.72rem;font-weight:700;color:#4ade80;text-align:center;';
-      tag.textContent = '⚙ Veredicto automático de Stockfish activo';
+      tag.textContent = '⚙ Análisis calibrado con Stockfish';
       box.prepend(tag);
     }
   };
