@@ -13,6 +13,7 @@ import { attachArmory } from './armory.js';
 import { attachSocialFeatures } from './social.js';
 import { attachHistoryVault } from './history_vault.js';
 import { attachDailyMissions } from './missions.js';
+import { attachGlobalMatchmaking } from './matchmaking.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -66,6 +67,9 @@ function attachPlugins() {
   // Fase 15: Archivo de Partidas Guardadas + Misiones Diarias y XP
   attachHistoryVault(app);
   attachDailyMissions(app);
+
+  // Fase 16: Emparejamiento Global por ELO + Ranking Top 5 en Firebase
+  attachGlobalMatchmaking(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
