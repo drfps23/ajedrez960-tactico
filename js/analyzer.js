@@ -1,6 +1,8 @@
-import { Chess960Engine, PIECE_VALUES } from './engine.js';
+import { Chess960Engine } from './engine.js';
 import { CLASS_META } from './analyzer.js';
 import { detectOpening } from './openings.js';
+
+const PIECE_VAL = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
 
 CLASS_META.book = {
   code: '📖',
@@ -98,19 +100,23 @@ function buildSmartStockfishComment({
       : `Jugada sólida y razonable. Stockfish prefería ligeramente ${bestSan}.`;
   }
 
-  return analyzer._buildCoachComment({
-    classification,
-    beforeEngine,
-    afterPlayed,
-    played,
-    bestMove,
-    bestSan,
-    bestRecord,
-    missedMate,
-    allowedMate,
-    isExactBest,
-    looksLikeSacrifice
-  });
+  if (typeof analyzer._buildCoachComment === 'function') {
+    return analyzer._buildCoachComment({
+      classification,
+      beforeEngine,
+      afterPlayed,
+      played,
+      bestMove,
+      bestSan,
+      bestRecord,
+      missedMate,
+      allowedMate,
+      isExactBest,
+      looksLikeSacrifice
+    });
+  }
+
+  return `Stockfish recomendaba ${bestSan} en esta posición.`;
 }
 
 export function attachStockfishAnalyzer(app) {
@@ -216,7 +222,7 @@ export function attachStockfishAnalyzer(app) {
       const missedMateToEqual = moverBefore > 90000 && moverAfter < 320;
       const missedMateStillWinning = moverBefore > 90000 && moverAfter >= 320 && moverAfter < 90000;
 
-      const openingHit = (engine.positionId === 518 && i < 10)
+      const openingHit = (engine.positionId === 518 && i < 10 && typeof detectOpening === 'function')
         ? detectOpening(history.slice(0, i + 1))
         : null;
       const isBookMove = Boolean(openingHit && !allowedMate && winDrop <= 4.5 && !isMatePlayed);
@@ -228,12 +234,14 @@ export function attachStockfishAnalyzer(app) {
         ? beforeEngine.isInCheck(color)
         : false;
 
-      // Detectar si salvó una pieza atacada o respondió con precisión bajo presión
-      const pieceWasAttacked = !played.castle &&
+      const hasAttackCheck = typeof beforeEngine.isSquareAttacked === 'function';
+      const pieceWasAttacked = !played.castle && hasAttackCheck &&
         beforeEngine.isSquareAttacked(played.from.r, played.from.c, enemy) &&
         played.piece !== 'P';
       const destC = played.castle ? played.kingToCol : played.to.c;
-      const destAttacked = !played.castle && afterEngine.isSquareAttacked(played.to.r, destC, enemy);
+      const destAttacked = !played.castle &&
+        typeof afterEngine.isSquareAttacked === 'function' &&
+        afterEngine.isSquareAttacked(played.to.r, destC, enemy);
       const savedUnderPressure = Boolean(
         isExactBest &&
         !isForced &&
@@ -249,7 +257,7 @@ export function attachStockfishAnalyzer(app) {
         destAttacked &&
         played.piece !== 'P' &&
         played.piece !== 'K' &&
-        (!played.captured || (PIECE_VALUES[played.piece] || 0) >= (PIECE_VALUES[played.captured] || 0) + 150) &&
+        (!played.captured || (PIECE_VAL[played.piece] || 0) >= (PIECE_VAL[played.captured] || 0) + 150) &&
         Math.abs(evalBest) < 360 &&
         moverAfter >= 40 &&
         legalMoves.length >= 4;
@@ -334,7 +342,7 @@ export function attachStockfishAnalyzer(app) {
   const origRenderPanel = analyzer._renderReviewPanel.bind(analyzer);
   analyzer._renderReviewPanel = () => {
     origRenderPanel();
-    const box = app.dom.postgameSlot?.querySelector('.an-box');
+    const box = app.dom?.postgameSlot?.querySelector('.an-box');
     if (!box || !analyzer.usedStockfish) return;
 
     const manualBtn = box.querySelector('#sf-deep-btn');
