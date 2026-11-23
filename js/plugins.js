@@ -15,6 +15,7 @@ import { attachHistoryVault } from './history_vault.js';
 import { attachDailyMissions } from './missions.js';
 import { attachGlobalMatchmaking } from './matchmaking.js';
 import { attachDashboardPro } from './dashboard_pro.js';
+import { attachRepertoireLab } from './repertoire.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -74,6 +75,9 @@ function attachPlugins() {
 
   // Fase 16B: Problema del Día, Revisar última partida, Racha semanal, Bandera y ELO por ritmo
   attachDashboardPro(app);
+
+  // Fase 16C: Laboratorio de Repertorio (estilo Lotus Chess) + Escáner Chess.com/Lichess
+  attachRepertoireLab(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
