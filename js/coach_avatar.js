@@ -23,7 +23,6 @@ function ensureAvatarStyles() {
   const style = document.createElement('style');
   style.dataset.coachAvatarCss = 'true';
   style.textContent = `
-    /* Solo aplica 3 columnas cuando la arena está visible */
     main.arena.hidden { display: none !important; }
     body.review-coach-open main.arena:not(.hidden) {
       display: grid !important;
@@ -36,50 +35,30 @@ function ensureAvatarStyles() {
     body.review-coach-open .an-coach { display: none !important; }
     body.review-coach-open .side-panel .card:has(#fx-preview-grid) { display: none !important; }
 
-    /* Layout de 3 columnas en Academia */
     .tr-layout.tr-with-coach {
       grid-template-columns: 255px minmax(320px, 500px) minmax(240px, 1fr) !important;
       align-items: start;
     }
     .tr-layout.tr-with-coach #ac-text { display: none !important; }
 
-    /* Cabina lateral del Entrenador */
     .coach-dock-panel {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
       background: linear-gradient(180deg, rgba(19, 27, 46, 0.94) 0%, rgba(9, 13, 22, 0.96) 100%);
-      border: 1.5px solid var(--border-color);
-      border-radius: 16px;
-      padding: 18px 14px;
-      position: sticky;
-      top: 14px;
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+      border: 1.5px solid var(--border-color); border-radius: 16px; padding: 18px 14px;
+      position: sticky; top: 14px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
     .coach-dock-panel.speaking {
       border-color: var(--coach-aura, #38bdf8);
       box-shadow: 0 0 28px color-mix(in srgb, var(--coach-aura, #38bdf8) 32%, transparent);
     }
-    .coach-dock-top {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-    }
+    .coach-dock-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
     .coach-portrait {
-      width: 120px;
-      height: 120px;
-      border-radius: 50%;
+      width: 120px; height: 120px; border-radius: 50%;
       background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--coach-aura, #38bdf8) 28%, #1e293b), #090d16);
       border: 3px solid var(--coach-aura, #38bdf8);
       box-shadow: 0 0 24px color-mix(in srgb, var(--coach-aura, #38bdf8) 28%, transparent);
-      display: grid;
-      place-items: center;
-      overflow: hidden;
-      flex-shrink: 0;
+      display: grid; place-items: center; overflow: hidden; flex-shrink: 0;
       animation: coachBreathe 3.2s ease-in-out infinite;
     }
     .coach-dock-panel.speaking .coach-portrait { animation: coachTalkBob 0.52s ease-in-out infinite; }
@@ -87,10 +66,7 @@ function ensureAvatarStyles() {
     .coach-eyes { transform-origin: 32px 27px; animation: coachBlink 4.6s infinite; }
     .coach-mouth-talk { opacity: 0; transform-origin: 32px 37px; }
     .coach-dock-panel.speaking .coach-mouth-idle { opacity: 0; }
-    .coach-dock-panel.speaking .coach-mouth-talk {
-      opacity: 1;
-      animation: coachMouth 0.24s ease-in-out infinite alternate;
-    }
+    .coach-dock-panel.speaking .coach-mouth-talk { opacity: 1; animation: coachMouth 0.24s ease-in-out infinite alternate; }
 
     .coach-identity { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .coach-name { font-size: 0.96rem; font-weight: 800; color: #f8fafc; }
@@ -102,10 +78,7 @@ function ensureAvatarStyles() {
     }
     .coach-wave-row { display: flex; align-items: center; justify-content: center; gap: 6px; height: 18px; }
     .coach-eq { display: flex; align-items: flex-end; gap: 3px; height: 15px; }
-    .coach-eq span {
-      width: 3.5px; height: 3px; border-radius: 2px;
-      background: var(--coach-aura, #38bdf8); opacity: 0.4;
-    }
+    .coach-eq span { width: 3.5px; height: 3px; border-radius: 2px; background: var(--coach-aura, #38bdf8); opacity: 0.4; }
     .coach-dock-panel.speaking .coach-eq span { opacity: 1; animation: coachEq 0.45s ease-in-out infinite alternate; }
     .coach-dock-panel.speaking .coach-eq span:nth-child(2) { animation-delay: 0.1s; }
     .coach-dock-panel.speaking .coach-eq span:nth-child(3) { animation-delay: 0.22s; }
@@ -114,20 +87,11 @@ function ensureAvatarStyles() {
     .coach-state-txt { font-size: 0.74rem; color: var(--text-muted); }
 
     .coach-bubble {
-      width: 100%;
-      background: rgba(9, 13, 22, 0.78);
-      border: 1px solid var(--border-color);
-      border-top: 3px solid var(--coach-aura, #38bdf8);
-      border-radius: 12px;
-      padding: 11px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
+      width: 100%; background: rgba(9, 13, 22, 0.78); border: 1px solid var(--border-color);
+      border-top: 3px solid var(--coach-aura, #38bdf8); border-radius: 12px; padding: 11px 12px;
+      display: flex; flex-direction: column; gap: 6px;
     }
-    .coach-bubble-head {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.8rem; font-weight: 800; color: #f8fafc;
-    }
+    .coach-bubble-head { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; font-weight: 800; color: #f8fafc; }
     .coach-bubble-text { font-size: 0.84rem; line-height: 1.5; color: var(--text-main); }
     .coach-bubble-best { font-size: 0.78rem; font-weight: 700; color: #4ade80; }
 
@@ -139,15 +103,9 @@ function ensureAvatarStyles() {
     .coach-swap-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
 
     @media (max-width: 1140px) {
-      body.review-coach-open main.arena:not(.hidden) {
-        grid-template-columns: 1fr !important;
-        max-width: 640px !important;
-      }
+      body.review-coach-open main.arena:not(.hidden) { grid-template-columns: 1fr !important; max-width: 640px !important; }
       .tr-layout.tr-with-coach { grid-template-columns: 1fr !important; }
-      .coach-dock-panel {
-        position: static; flex-direction: row; flex-wrap: wrap;
-        align-items: center; padding: 12px;
-      }
+      .coach-dock-panel { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px; }
       .coach-portrait { width: 76px; height: 76px; }
       .coach-portrait svg { width: 70px; height: 70px; }
       .coach-identity { align-items: flex-start; text-align: left; flex: 1; }
@@ -407,7 +365,6 @@ export function attachCoachAvatar(app) {
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
 
-  // Cerrar revisión limpiamente si el usuario navega fuera del tablero
   if (app.shell?.navigate) {
     const origNav = app.shell.navigate.bind(app.shell);
     app.shell.navigate = (viewId) => {
@@ -419,7 +376,6 @@ export function attachCoachAvatar(app) {
     };
   }
 
-  // 1. Montar cabina izquierda en el Analizador Post-Partida
   const origReview = app.analyzer._renderReviewPanel.bind(app.analyzer);
   app.analyzer._renderReviewPanel = () => {
     origReview();
@@ -453,9 +409,7 @@ export function attachCoachAvatar(app) {
     if (existing) existing.replaceWith(panel);
     else arena.prepend(panel);
 
-    if (!wasOpen) {
-      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-    }
+    if (!wasOpen) requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
 
   const origExit = app.analyzer.exitReview.bind(app.analyzer);
@@ -464,7 +418,6 @@ export function attachCoachAvatar(app) {
   const origReset = app.analyzer.reset.bind(app.analyzer);
   app.analyzer.reset = () => { closeReviewDock(); return origReset(); };
 
-  // 2. Montar cabina izquierda en la Academia Interactiva
   if (app.academy) {
     const syncAcademyDock = () => {
       const layout = app.academy.container?.querySelector('.tr-layout');
