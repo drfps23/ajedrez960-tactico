@@ -1,37 +1,69 @@
 import { Chess960Engine, FILES } from './engine.js';
 import { CombatFX } from './fx.js';
 import { THEMES } from './themes.js';
-import { ACADEMY_LESSONS } from './data/academy_data.js';
+import { ACADEMY_LEVELS, ACADEMY_LESSONS } from './data/academy_data.js';
 
-const CATEGORIES = [
-  { id: 'all',      label: 'Todos' },
-  { id: 'basics',   label: 'Principiantes' },
-  { id: 'openings', label: 'Aperturas' },
-  { id: 'defenses', label: 'Defensas' },
-  { id: 'gambits',  label: 'Gambitos' }
-];
+const DONE_KEY = 'ajedrez960_academy_done_v1';
 
 function sqToRC(name) {
   return { r: 8 - parseInt(name[1], 10), c: FILES.indexOf(name[0]) };
 }
 
+function buildLessonEngine(lesson) {
+  const eng = new Chess960Engine(lesson.positionId ?? 518);
+  if (!lesson.fen) return eng;
+  const parts = lesson.fen.trim().split(/\s+/);
+  const rows = parts[0].split('/');
+  eng.board = Array.from({ length: 8 }, () => new Array(8).fill(null));
+  for (let r = 0; r < 8; r++) {
+    let c = 0;
+    for (const ch of rows[r]) {
+      if (ch >= '1' && ch <= '8') c += parseInt(ch, 10);
+      else {
+        eng.board[r][c] = { color: ch === ch.toUpperCase() ? 'w' : 'b', type: ch.toUpperCase() };
+        c++;
+      }
+    }
+  }
+  eng.turn = parts[1] === 'b' ? 'b' : 'w';
+  eng.castling = { w: { K: false, Q: false }, b: { K: false, Q: false } };
+  eng.epTarget = null;
+  eng.history = [];
+  eng.status = 'playing';
+  return eng;
+}
+
 export class AcademyTrainer {
   constructor(app) {
     this.app = app;
-    this.category = 'all';
+    this.level = 1;
     this.lesson = ACADEMY_LESSONS[0];
     this.stepIdx = 0;
     this.voiceOn = true;
     this.autoTimer = null;
     this.fx = null;
+    this.busy = false;
+    this.selected = null;
+    this.legal = [];
     this.hidden = new Set();
+    this.hintSquares = new Set();
+    this.taskState = { type: 'info', text: '' };
+    this.completed = this._loadDone();
+  }
+
+  _loadDone() {
+    try { return new Set(JSON.parse(localStorage.getItem(DONE_KEY) || '[]')); }
+    catch { return new Set(); }
+  }
+
+  _markDone(id) {
+    this.completed.add(id);
+    try { localStorage.setItem(DONE_KEY, JSON.stringify([...this.completed])); } catch { /* ignorar */ }
   }
 
   stop() {
-    if (this.autoTimer) {
-      clearTimeout(this.autoTimer);
-      this.autoTimer = null;
-    }
+    if (this.autoTimer) { clearTimeout(this.autoTimer); this.autoTimer = null; }
+    this.busy = false;
     this.fx?.cancelActive();
     this.app.analyzer?.voice?.stop();
   }
@@ -41,48 +73,87 @@ export class AcademyTrainer {
     this.selectLesson(this.lesson.id, false);
   }
 
-  _filteredLessons() {
-    if (this.category === 'all') return ACADEMY_LESSONS;
-    return ACADEMY_LESSONS.filter(l => l.category === this.category);
+  _lessonsInLevel() {
+    return ACADEMY_LESSONS.filter(l => l.level === this.level);
+  }
+
+  _currentStep() {
+    return this.lesson.steps[this.stepIdx] || null;
+  }
+
+  _isWaitingForUser() {
+    const st = this._currentStep();
+    return Boolean(st && st.interactive && !this.busy);
+  }
+
+  _flipped() {
+    return this.lesson.playerColor === 'b';
   }
 
   selectLesson(id, speakIntro = true) {
     this.stop();
     const found = ACADEMY_LESSONS.find(l => l.id === id) || ACADEMY_LESSONS[0];
     this.lesson = found;
-    this.engine = new Chess960Engine(found.positionId);
+    this.level = found.level;
+    this.engine = buildLessonEngine(found);
     this.stepIdx = 0;
+    this.selected = null;
+    this.legal = [];
     this.hidden.clear();
+    this.hintSquares.clear();
+
+    const firstStep = this._currentStep();
+    this.taskState = firstStep?.interactive
+      ? { type: 'task', text: `🎯 ${firstStep.prompt}` }
+      : { type: 'info', text: 'Pulsa "Siguiente ▶" o "▶ Auto" para comenzar la lección interactiva.' };
+
     this._renderScaffold();
     if (speakIntro && this.voiceOn) {
-      this.app.analyzer?.voice?.speak(`${found.title}. ${found.summary}`, true);
+      const introSpeech = firstStep?.interactive
+        ? `${found.title}. ${firstStep.prompt}`
+        : `${found.title}. ${found.summary}`;
+      this.app.analyzer?.voice?.speak(introSpeech, true);
     }
   }
 
   _renderScaffold() {
     if (!this.container) return;
-    const list = this._filteredLessons();
+    const list = this._lessonsInLevel();
     const isPro = this.app.store.hasAccess('pro_academy');
+    const waiting = this._isWaitingForUser();
 
     this.container.innerHTML = `
-      <div class="sec-head" style="margin-bottom:14px">
+      <div class="sec-head" style="margin-bottom:12px">
         <div>
-          <h2>🎓 Academia: Fundamentos, Aperturas, Defensas y Gambitos</h2>
-          <p class="sec-sub">Avanza paso a paso sobre el tablero con animaciones y narración en voz alta.</p>
+          <h2>🎓 Academia Interactiva (${this.completed.size}/${ACADEMY_LESSONS.length})</h2>
+          <p class="sec-sub">4 niveles progresivos: el entrenador te explica la idea y te desafía a ejecutar las jugadas clave.</p>
         </div>
         <button class="btn btn-secondary" id="ac-home">← Inicio</button>
       </div>
-      <div class="tr-bar" style="margin-bottom:12px">
-        ${CATEGORIES.map(c => `<button class="tr-pill ${this.category === c.id ? 'active' : ''}" data-cat="${c.id}">${c.label}</button>`).join('')}
+
+      <div class="tr-levels">
+        ${ACADEMY_LEVELS.map(l => {
+          const allInLvl = ACADEMY_LESSONS.filter(x => x.level === l.id);
+          const doneInLvl = allInLvl.filter(x => this.completed.has(x.id)).length;
+          const locked = l.proOnly && !isPro;
+          return `
+            <button class="tr-level-btn ${this.level === l.id ? 'active' : ''}" data-lvl="${l.id}" data-locked="${locked}">
+              <strong>${locked ? '🔒 ' : ''}${l.name}</strong>
+              <span>ELO ${l.elo} · ${doneInLvl}/${allInLvl.length} completadas</span>
+            </button>
+          `;
+        }).join('')}
       </div>
+
       <div class="tr-list" style="margin-bottom:16px">
         ${list.map(l => {
-          const locked = !isPro && l.category !== 'basics';
-          return `<button class="tr-pill ${l.id === this.lesson.id ? 'active' : ''}" data-lid="${l.id}" data-locked="${locked}">
-            ${locked ? '🔒 ' : ''}${l.title}
+          const done = this.completed.has(l.id);
+          return `<button class="tr-pill ${l.id === this.lesson.id ? 'active' : ''} ${done ? 'solved' : ''}" data-lid="${l.id}">
+            ${done ? '✓ ' : ''}${l.title}
           </button>`;
         }).join('')}
       </div>
+
       <div class="tr-layout">
         <div class="tr-board-wrap" id="ac-wrap">
           <div class="board-grid" id="ac-grid"></div>
@@ -91,24 +162,30 @@ export class AcademyTrainer {
         <div class="tr-panel">
           <div class="status-row">
             <span class="pos-badge">${this.lesson.badge}</span>
-            <span class="turn-pill" id="ac-progress">Paso 0 / ${this.lesson.steps.length}</span>
+            <span class="turn-pill" id="ac-progress">Paso ${this.stepIdx} / ${this.lesson.steps.length}</span>
           </div>
           <h3>${this.lesson.title}</h3>
           <div class="tr-feedback" id="ac-text">${this.lesson.summary}</div>
+          <div class="tr-feedback ${this.taskState.type}" id="ac-task">${this.taskState.text}</div>
           <div class="tr-actions">
             <button class="btn btn-secondary" id="ac-prev">◀ Anterior</button>
-            <button class="btn btn-primary" id="ac-next">Siguiente ▶</button>
+            <button class="btn btn-primary" id="ac-next">${waiting ? '⏭ Ver jugada' : 'Siguiente ▶'}</button>
+            <button class="btn btn-secondary" id="ac-hint" style="${waiting ? '' : 'display:none'}">💡 Pista</button>
             <button class="btn btn-secondary" id="ac-auto">▶ Auto</button>
             <button class="btn btn-secondary ${this.voiceOn ? 'active' : ''}" id="ac-voice">${this.voiceOn ? '🔊 Voz' : '🔇 Voz'}</button>
           </div>
-          <button class="btn btn-ghost" id="ac-practice" style="width:100%">♟ Practicar esta modalidad en el tablero</button>
+          <button class="btn btn-ghost" id="ac-practice" style="width:100%">♟ Practicar esta modalidad contra IA</button>
         </div>
       </div>
     `;
 
     this.gridEl = this.container.querySelector('#ac-grid');
     this.textEl = this.container.querySelector('#ac-text');
+    this.taskEl = this.container.querySelector('#ac-task');
     this.progEl = this.container.querySelector('#ac-progress');
+    this.nextBtn = this.container.querySelector('#ac-next');
+    this.hintBtn = this.container.querySelector('#ac-hint');
+
     this.fx = new CombatFX(this.container.querySelector('#ac-canvas'), this.container.querySelector('#ac-wrap'));
     const theme = THEMES[this.app.themes.currentId];
     if (theme) this.fx.setPalette(theme.fxPalette);
@@ -117,21 +194,18 @@ export class AcademyTrainer {
       this.stop();
       this.app.shell.navigate('home');
     });
-    this.container.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => {
-      this.category = b.dataset.cat;
-      const first = this._filteredLessons().find(l => isPro || l.category === 'basics') || ACADEMY_LESSONS[0];
-      this.selectLesson(first.id, false);
+    this.container.querySelectorAll('[data-lvl]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.locked === 'true') { this.stop(); this.app.shell.navigate('subscription'); return; }
+      this.level = Number(b.dataset.lvl);
+      const first = this._lessonsInLevel()[0];
+      if (first) this.selectLesson(first.id, true);
     }));
     this.container.querySelectorAll('[data-lid]').forEach(b => b.addEventListener('click', () => {
-      if (b.dataset.locked === 'true') {
-        this.stop();
-        this.app.shell.navigate('subscription');
-        return;
-      }
       this.selectLesson(b.dataset.lid, true);
     }));
     this.container.querySelector('#ac-prev').addEventListener('click', () => this.stepBack());
-    this.container.querySelector('#ac-next').addEventListener('click', () => this.stepForward(false));
+    this.nextBtn.addEventListener('click', () => this.stepForward(false));
+    this.hintBtn.addEventListener('click', () => this._showHint());
     this.container.querySelector('#ac-auto').addEventListener('click', () => this.toggleAuto());
     this.container.querySelector('#ac-voice').addEventListener('click', (e) => {
       this.voiceOn = !this.voiceOn;
@@ -141,25 +215,83 @@ export class AcademyTrainer {
     });
     this.container.querySelector('#ac-practice').addEventListener('click', () => {
       this.stop();
-      const variant = this.lesson.positionId === 518 ? 'classic' : 'fischer960';
+      const posId = this.lesson.positionId ?? 518;
+      const variant = posId === 518 ? 'classic' : 'fischer960';
       this.app.shell.navigate('play');
       this.app._setModeProgrammatically('ai-normal');
       this.app.setVariant(variant, { startFresh: false });
-      this.app.startNewGame(this.lesson.positionId);
+      this.app.startNewGame(posId);
     });
 
     this._renderBoard();
   }
 
+  _findExpectedMove(step) {
+    if (!step) return null;
+    const legal = this.engine.getLegalMoves(this.engine.turn);
+    if (step.castle) return legal.find(m => m.castle === step.castle) || null;
+    const f = sqToRC(step.from);
+    const t = sqToRC(step.to);
+    return legal.find(m => m.from.r === f.r && m.from.c === f.c && m.to.r === t.r && m.to.c === t.c) || null;
+  }
+
+  _showHint() {
+    const move = this._findExpectedMove(this._currentStep());
+    if (!move) return;
+    const destC = move.castle ? move.kingToCol : move.to.c;
+    this.hintSquares = new Set([`${move.from.r},${move.from.c}`, `${move.to.r},${destC}`]);
+    this._renderBoard();
+  }
+
+  _onSquareClick(r, c) {
+    if (!this._isWaitingForUser()) return;
+
+    if (this.selected) {
+      const direct = this.legal.filter(m => m.to.r === r && m.to.c === c);
+      const castleMatch = this.legal.filter(m => m.castle && m.from.r === r && m.kingToCol === c);
+      const chosen = direct[0] || castleMatch[0];
+      if (chosen) {
+        const expected = this._findExpectedMove(this._currentStep());
+        const same = expected &&
+          chosen.from.r === expected.from.r && chosen.from.c === expected.from.c &&
+          chosen.to.r === expected.to.r && chosen.to.c === expected.to.c &&
+          (chosen.castle || null) === (expected.castle || null);
+
+        this.selected = null;
+        this.legal = [];
+
+        if (!same) {
+          this._setTask('err', `Casi, prueba otra jugada. ${this._currentStep().prompt}`);
+          this._renderBoard();
+          return;
+        }
+        this._executeStep(this._currentStep(), chosen, false);
+        return;
+      }
+    }
+
+    const p = this.engine.board[r][c];
+    if (p && p.color === this.engine.turn) {
+      this.selected = { r, c };
+      this.legal = this.engine.getLegalMovesFrom(r, c);
+    } else {
+      this.selected = null;
+      this.legal = [];
+    }
+    this._renderBoard();
+  }
+
+  _setTask(type, text) {
+    this.taskState = { type, text };
+    if (this.taskEl) {
+      this.taskEl.className = `tr-feedback ${type}`;
+      this.taskEl.textContent = text;
+    }
+  }
+
   toggleAuto() {
-    if (this.autoTimer) {
-      clearTimeout(this.autoTimer);
-      this.autoTimer = null;
-      return;
-    }
-    if (this.stepIdx >= this.lesson.steps.length) {
-      this.selectLesson(this.lesson.id, false);
-    }
+    if (this.autoTimer) { clearTimeout(this.autoTimer); this.autoTimer = null; return; }
+    if (this.stepIdx >= this.lesson.steps.length) this.selectLesson(this.lesson.id, false);
     this.stepForward(true);
   }
 
@@ -168,45 +300,66 @@ export class AcademyTrainer {
     this.stop();
     this.engine.undo();
     this.stepIdx--;
+    this.selected = null;
+    this.legal = [];
+    this.hintSquares.clear();
+    const st = this._currentStep();
+    this._setTask(st?.interactive ? 'task' : 'info', st?.interactive ? `🎯 ${st.prompt}` : 'Pulsa "Siguiente ▶" para continuar.');
     this._syncText();
     this._renderBoard();
   }
 
   stepForward(continueAuto = false) {
-    if (this.stepIdx >= this.lesson.steps.length) {
-      this.autoTimer = null;
-      return;
-    }
-    const step = this.lesson.steps[this.stepIdx];
-    const legal = this.engine.getLegalMoves(this.engine.turn);
-    let move = null;
-
-    if (step.castle) {
-      move = legal.find(m => m.castle === step.castle);
-    } else {
-      const f = sqToRC(step.from);
-      const t = sqToRC(step.to);
-      move = legal.find(m => m.from.r === f.r && m.from.c === f.c && m.to.r === t.r && m.to.c === t.c);
-    }
+    if (this.busy || this.stepIdx >= this.lesson.steps.length) { this.autoTimer = null; return; }
+    const step = this._currentStep();
+    const move = this._findExpectedMove(step);
     if (!move) return;
+    this._executeStep(step, move, continueAuto);
+  }
 
+  _executeStep(step, move, continueAuto) {
     const moverColor = this.engine.turn;
     const enemyColor = moverColor === 'w' ? 'b' : 'w';
     const rec = this.engine.makeMove(move);
     this.stepIdx++;
-    this._syncText();
+    this.busy = true;
+    this.selected = null;
+    this.legal = [];
+    this.hintSquares.clear();
 
     const finish = () => {
+      this.busy = false;
       this.hidden.clear();
       this._renderBoard();
-      if (this.voiceOn) {
-        this.app.analyzer?.voice?.speak(step.text, true);
+
+      const nextStep = this._currentStep();
+      if (!nextStep) {
+        this._markDone(this.lesson.id);
+        this._setTask('ok', '🏆 ¡Lección completada! Prueba el botón de abajo para practicarla contra la IA o pasa a la siguiente.');
+      } else if (nextStep.interactive) {
+        this._setTask('task', `🎯 ${nextStep.prompt}`);
+      } else {
+        this._setTask('info', 'Observa la respuesta del rival...');
       }
-      if (continueAuto && this.stepIdx < this.lesson.steps.length) {
+
+      this._syncText();
+
+      if (this.voiceOn) {
+        const spoken = nextStep?.interactive && !continueAuto
+          ? `${step.text} ${nextStep.prompt}`
+          : step.text;
+        this.app.analyzer?.voice?.speak(spoken, true);
+      }
+
+      // Si el siguiente paso es respuesta automática del rival tras un acierto del jugador, avanzarlo solo
+      if (nextStep && !nextStep.interactive && step.interactive && !continueAuto) {
+        this.autoTimer = setTimeout(() => this.stepForward(false), 1600);
+      } else if (continueAuto && nextStep) {
         this.autoTimer = setTimeout(() => this.stepForward(true), 3200);
       }
     };
 
+    const flipped = this._flipped();
     this.hidden.clear();
     if (rec.castle) {
       const row = rec.from.r;
@@ -222,6 +375,7 @@ export class AcademyTrainer {
         kingTo: rec.kingToCol,
         rookFrom: rec.rookFromCol,
         rookTo: rec.rookToCol,
+        flipped,
         onComplete: finish
       });
     } else if (rec.captured) {
@@ -233,6 +387,7 @@ export class AcademyTrainer {
         victimHtml: this.app.pieceRenderer(rec.captured, enemyColor),
         from: rec.from,
         to: rec.to,
+        flipped,
         onCharge: () => this.app.sound.playCharge(rec.piece),
         onImpact: () => this.app.sound.playAttack(rec.piece),
         onComplete: finish
@@ -246,6 +401,7 @@ export class AcademyTrainer {
         pieceType: rec.piece,
         from: rec.from,
         to: rec.to,
+        flipped,
         onComplete: finish
       });
     }
@@ -258,15 +414,22 @@ export class AcademyTrainer {
         ? this.lesson.summary
         : this.lesson.steps[this.stepIdx - 1].text;
     }
+    const waiting = this._isWaitingForUser();
+    if (this.nextBtn) this.nextBtn.textContent = waiting ? '⏭ Ver jugada' : 'Siguiente ▶';
+    if (this.hintBtn) this.hintBtn.style.display = waiting ? '' : 'none';
   }
 
   _renderBoard() {
     if (!this.gridEl) return;
     this.gridEl.innerHTML = '';
+    const flipped = this._flipped();
     const last = this.engine.history[this.engine.history.length - 1] || null;
 
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
+    for (let vr = 0; vr < 8; vr++) {
+      for (let vc = 0; vc < 8; vc++) {
+        const r = flipped ? 7 - vr : vr;
+        const c = flipped ? 7 - vc : vc;
+
         const sq = document.createElement('div');
         sq.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
         if (last) {
@@ -274,6 +437,31 @@ export class AcademyTrainer {
           if (last.from.r === r && last.from.c === c) sq.classList.add('last-from');
           if (last.to.r === r && toCol === c) sq.classList.add('last-to');
         }
+        if (this.selected && this.selected.r === r && this.selected.c === c) sq.classList.add('selected');
+        if (this.hintSquares.has(`${r},${c}`)) sq.classList.add('hint-sq');
+
+        const matching = this.legal.filter(m => m.to.r === r && m.to.c === c);
+        if (matching.some(m => m.castle)) {
+          sq.classList.add('castle-target');
+        } else if (matching.length > 0) {
+          const mk = document.createElement('div');
+          mk.className = matching.some(m => m.captured) ? 'capture-ring' : 'move-dot';
+          sq.appendChild(mk);
+        }
+
+        if (vc === 0) {
+          const rk = document.createElement('span');
+          rk.className = 'coord-rank';
+          rk.textContent = 8 - r;
+          sq.appendChild(rk);
+        }
+        if (vr === 7) {
+          const fl = document.createElement('span');
+          fl.className = 'coord-file';
+          fl.textContent = FILES[c];
+          sq.appendChild(fl);
+        }
+
         const piece = this.engine.board[r][c];
         if (piece && !this.hidden.has(`${r},${c}`)) {
           const wrap = document.createElement('div');
@@ -281,6 +469,8 @@ export class AcademyTrainer {
           wrap.innerHTML = this.app.pieceRenderer(piece.type, piece.color);
           sq.appendChild(wrap);
         }
+
+        sq.addEventListener('click', () => this._onSquareClick(r, c));
         this.gridEl.appendChild(sq);
       }
     }
