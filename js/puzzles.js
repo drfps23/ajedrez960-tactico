@@ -1,133 +1,137 @@
 import { Chess960Engine, FILES } from './engine.js';
-import { SoundFX } from './audio.js';
 import { CombatFX } from './fx.js';
 import { THEMES } from './themes.js';
 
-const SOLVED_KEY = 'ajedrez960_puzzles_solved_v1';
+const PUZZLES_KEY = 'ajedrez960_puzzles_solved_v1';
+
+function parseSq(sq) {
+  return { r: 8 - parseInt(sq[1], 10), c: sq.charCodeAt(0) - 97 };
+}
+
+function toUci(from, to) {
+  return FILES[from.c] + (8 - from.r) + FILES[to.c] + (8 - to.r);
+}
 
 export const PUZZLE_BANK = [
   // === AJEDREZ CLÁSICO ===
   {
-    id: 'cl-1',
+    id: 'c1',
     variant: 'classic',
-    tier: 'free',
-    difficulty: 'Fácil',
     title: 'Mate del Pasillo',
-    theme: 'Mate en 1',
-    fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
-    solution: ['d1d8'],
-    hint: 'El Rey negro está atrapado detrás de sus propios peones en la octava fila.',
-    explain: 'Td8# es jaque mate inmediato: los peones de f7, g7 y h7 le quitan toda escapatoria al Rey.'
+    level: 'Fácil',
+    goal: 'Blancas juegan y dan mate en 1.',
+    hint: 'La octava fila está indefensa y los peones encierran al Rey enemigo.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'g1'], ['w', 'R', 'd1'], ['w', 'P', 'f2'], ['w', 'P', 'g2'], ['w', 'P', 'h2'],
+      ['b', 'K', 'g8'], ['b', 'R', 'c2'], ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['d1d8']
   },
   {
-    id: 'cl-2',
+    id: 'c2',
     variant: 'classic',
-    tier: 'free',
-    difficulty: 'Fácil',
-    title: 'El Beso de la Muerte',
-    theme: 'Mate en 1',
-    fen: '6k1/5p1p/5PpQ/8/8/8/5PPP/6K1 w - - 0 1',
-    solution: ['h6g7'],
-    hint: 'Tu peón avanzado en f6 controla la casilla clave junto al Rey enemigo.',
-    explain: 'Dg7# da mate apoyada por el peón en f6. La Dama sella todas las casillas de escape.'
+    title: 'Mate del Pastor',
+    level: 'Fácil',
+    goal: 'Blancas juegan y dan mate en 1.',
+    hint: 'El punto f7 solo está defendido por el Rey y tu Alfil ya apunta allí.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'g1'], ['w', 'Q', 'f3'], ['w', 'B', 'c4'], ['w', 'P', 'f2'], ['w', 'P', 'g2'], ['w', 'P', 'h2'],
+      ['b', 'K', 'e8'], ['b', 'Q', 'd8'], ['b', 'R', 'a8'], ['b', 'R', 'h8'], ['b', 'B', 'c8'], ['b', 'B', 'f8'],
+      ['b', 'N', 'b8'], ['b', 'N', 'g8'], ['b', 'P', 'a7'], ['b', 'P', 'b7'], ['b', 'P', 'c7'],
+      ['b', 'P', 'd7'], ['b', 'P', 'e5'], ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['f3f7']
   },
   {
-    id: 'cl-3',
+    id: 'c3',
     variant: 'classic',
-    tier: 'free',
-    difficulty: 'Fácil',
-    title: 'Horquilla Real del Caballo',
-    theme: 'Ataque Doble',
-    fen: 'q3k3/pp3ppp/8/3N4/8/8/PPP2PPP/6K1 w - - 0 1',
-    solution: ['d5c7', 'e8d7', 'c7a8'],
-    hint: 'Busca una casilla desde donde tu Caballo dé jaque al Rey y ataque a la Dama al mismo tiempo.',
-    explain: 'Cc7+ aplica un ataque doble demoledor sobre Rey y Dama; al moverse el Rey, Cxa8 gana la Dama limpia.'
+    title: 'Ataque Doble Real',
+    level: 'Intermedio',
+    goal: 'Blancas juegan y ganan la Dama en 2 jugadas.',
+    hint: 'Busca un salto de Caballo que dé jaque al Rey y ataque la Dama al mismo tiempo.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'g1'], ['w', 'N', 'd5'], ['w', 'R', 'a1'], ['w', 'P', 'f2'], ['w', 'P', 'g2'], ['w', 'P', 'h2'],
+      ['b', 'K', 'g8'], ['b', 'Q', 'c6'], ['b', 'R', 'a8'], ['b', 'P', 'a7'], ['b', 'P', 'b7'],
+      ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['d5e7', 'g8h8', 'e7c6']
   },
   {
-    id: 'cl-4',
+    id: 'c4',
     variant: 'classic',
-    tier: 'pro',
-    difficulty: 'Intermedio',
-    title: 'Mate de la Coz',
-    theme: 'Sacrificio · Mate en 2',
-    fen: '5r1k/6pp/7N/8/8/1Q6/5PPP/6K1 w - - 0 1',
-    solution: ['b3g8', 'f8g8', 'h6f7'],
-    hint: 'Sacrifica tu Dama en la esquina para encerrar al Rey con su propia Torre.',
-    explain: '¡Sacrificio clásico! Dg8+ fuerza Txg8 (el Rey no puede capturar porque el Caballo defiende), y Cf7# da mate asfixiado.'
-  },
-  {
-    id: 'cl-5',
-    variant: 'classic',
-    tier: 'pro',
-    difficulty: 'Intermedio',
-    title: 'Mate de la Ópera (Morphy)',
-    theme: 'Sacrificio · Mate en 2',
-    fen: '4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w - - 0 1',
-    solution: ['b3b8', 'd7b8', 'd1d8'],
-    hint: 'Desvía al Caballo de d7 sacrificando la Dama en b8 para abrir la columna d.',
-    explain: 'Db8+!! obliga a Cxb8, despejando la columna d para que Td8# dé mate apoyado por el Alfil en g5.'
-  },
-  {
-    id: 'cl-6',
-    variant: 'classic',
-    tier: 'pro',
-    difficulty: 'Difícil',
-    title: 'Persecución y Doble de Dama',
-    theme: 'Táctica en 3 jugadas',
-    fen: '6k1/7p/4p1p1/8/1n6/8/5PPP/3Q2K1 w - - 0 1',
-    solution: ['d1d8', 'g8g7', 'd8d4', 'g7g8', 'd4b4'],
-    hint: 'Empieza con un jaque en la octava fila para empujar al Rey hacia una diagonal vulnerable.',
-    explain: 'Dd8+ fuerza Rg7, lo que habilita Dd4+ atacando simultáneamente al Rey y al Caballo indefenso de b4.'
+    title: 'Sacrificio de Dama',
+    level: 'Avanzado',
+    goal: 'Blancas juegan y dan mate en 2.',
+    hint: 'Sacrifica la Dama en la octava fila para desviar la defensa y rematar con la Torre.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'g1'], ['w', 'Q', 'd3'], ['w', 'R', 'd1'], ['w', 'P', 'f2'], ['w', 'P', 'g2'], ['w', 'P', 'h2'],
+      ['b', 'K', 'g8'], ['b', 'R', 'd8'], ['b', 'Q', 'b6'], ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['d3d8', 'b6d8', 'd1d8']
   },
 
   // === FISCHER 960 ===
   {
-    id: 'f960-1',
+    id: 'f1',
     variant: 'fischer960',
-    tier: 'free',
-    difficulty: 'Fácil',
-    title: 'Batería de Esquina 960',
-    theme: 'Mate en 1 · Geometría 960',
-    fen: '1r3rk1/ppp2p1p/8/8/8/8/PQ3PPP/B5K1 w - - 0 1',
-    solution: ['b2g7'],
-    hint: 'En Fischer 960 el Alfil en a1 crea una batería mortal con la Dama en b2.',
-    explain: 'Dg7# aprovecha la gran diagonal a1-h8 típica de las posiciones de esquina en Ajedrez 960.'
+    title: 'Alfil Francotirador 960',
+    level: 'Fácil',
+    goal: 'Blancas juegan y dan mate en 1.',
+    hint: 'En Fischer 960 el Alfil desde a1 domina toda la gran diagonal hasta g7.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'f1'], ['w', 'B', 'a1'], ['w', 'Q', 'g4'], ['w', 'R', 'c1'], ['w', 'P', 'a2'], ['w', 'P', 'b3'], ['w', 'P', 'f2'], ['w', 'P', 'g2'], ['w', 'P', 'h2'],
+      ['b', 'K', 'h8'], ['b', 'R', 'e8'], ['b', 'R', 'c8'], ['b', 'B', 'b8'], ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['g4g7']
   },
   {
-    id: 'f960-2',
+    id: 'f2',
     variant: 'fischer960',
-    tier: 'free',
-    difficulty: 'Fácil',
-    title: 'Mate Árabe Asimétrico',
-    theme: 'Mate en 1 · Torre + Caballo',
-    fen: '1rr4k/ppp3pp/5N2/8/8/8/PPP5/1K5R w - - 0 1',
-    solution: ['h1h7'],
-    hint: 'Tu Caballo en f6 ya quita la casilla g8 y defiende el punto h7.',
-    explain: 'Txh7# ejecuta un Mate Árabe limpio: el Caballo en f6 protege a la Torre y bloquea el escape por g8.'
+    title: 'Batería de Torres en Columna E',
+    level: 'Intermedio',
+    goal: 'Blancas juegan y dan mate en 2.',
+    hint: 'Rompe directamente en e8 con tu primera Torre; la segunda completará el mate.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'c1'], ['w', 'R', 'e2'], ['w', 'R', 'e1'], ['w', 'P', 'b2'], ['w', 'P', 'c2'], ['w', 'P', 'g2'], ['w', 'P', 'h2'],
+      ['b', 'K', 'g8'], ['b', 'R', 'e8'], ['b', 'R', 'b8'], ['b', 'P', 'a7'], ['b', 'P', 'b7'], ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['e2e8', 'b8e8', 'e1e8']
   },
   {
-    id: 'f960-3',
+    id: 'f3',
     variant: 'fischer960',
-    tier: 'pro',
-    difficulty: 'Intermedio',
-    title: 'Francotirador de a1',
-    theme: 'Sacrificio · Mate en 2',
-    fen: '1r4rk/ppp2p1p/8/4Q3/8/1P6/P1P2PPP/BK4R1 w - - 0 1',
-    solution: ['e5g7', 'g8g7', 'a1g7'],
-    hint: 'Si entregas la Dama en g7, despejas la gran diagonal para tu Alfil en a1.',
-    explain: 'Dg7+!! obliga a Txg7 y abre paso al golpe final Axg7# (o Txg7#), coordinando el Alfil de esquina y la Torre.'
+    title: 'Enroque 960 Fulminante',
+    level: 'Avanzado',
+    goal: 'Blancas juegan y dan mate en 1 usando el enroque 960.',
+    hint: 'Selecciona tu Rey en d1 y haz clic en la Torre en h1 (iluminada en dorado) para enrocar.',
+    turn: 'w',
+    startCols: { king: 3, rookQ: 0, rookK: 7 },
+    castling: { w: { K: true, Q: false }, b: { K: false, Q: false } },
+    pieces: [
+      ['w', 'K', 'd1'], ['w', 'R', 'h1'], ['w', 'P', 'a2'], ['w', 'P', 'b2'], ['w', 'P', 'c2'],
+      ['b', 'K', 'f8'], ['b', 'R', 'e8'], ['b', 'R', 'g8'], ['b', 'P', 'e7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['d1h1']
   },
   {
-    id: 'f960-4',
+    id: 'f4',
     variant: 'fischer960',
-    tier: 'pro',
-    difficulty: 'Difícil',
-    title: 'Demolición de Torre 960',
-    theme: 'Sacrificio · Mate en 2',
-    fen: '1r4rk/ppp2p1p/5P2/8/8/5Q2/PPP2PPP/1K5R w - - 0 1',
-    solution: ['h1h7', 'h8h7', 'f3h5'],
-    hint: 'Sacrifica la Torre en h7 para arrastrar al Rey a una columna fatal.',
-    explain: 'Txh7+!! fuerza Rxh7 (el peón de f6 cubre g7) y Dh5# remata inmediatamente al Rey expuesto.'
+    title: 'Mate de la Coz (Salto Sísmico)',
+    level: 'Fácil',
+    goal: 'Blancas juegan y dan mate en 1.',
+    hint: 'El Rey negro está encerrado por sus propias piezas; el Caballo puede saltar sobre ellas.',
+    turn: 'w',
+    pieces: [
+      ['w', 'K', 'b1'], ['w', 'N', 'g5'], ['w', 'R', 'a1'], ['w', 'P', 'a2'], ['w', 'P', 'b2'], ['w', 'P', 'c2'],
+      ['b', 'K', 'h8'], ['b', 'R', 'g8'], ['b', 'P', 'f7'], ['b', 'P', 'g7'], ['b', 'P', 'h7']
+    ],
+    solution: ['g5f7']
   }
 ];
 
@@ -136,169 +140,82 @@ function ensurePuzzleStyles() {
   const style = document.createElement('style');
   style.dataset.puzzlesCss = 'true';
   style.textContent = `
-    .pz-tabs {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .pz-tab {
-      background: var(--bg-card);
-      color: var(--text-muted);
-      border: 1px solid var(--border-color);
-      border-radius: 9px;
-      padding: 7px 14px;
-      font-size: 0.82rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .pz-tab.active {
-      background: rgba(56, 189, 248, 0.16);
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
-    }
-    .pz-grid {
+    .pz-layout {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 12px;
-    }
-    .pz-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 13px;
-      padding: 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      cursor: pointer;
-      transition: transform 0.14s ease, border-color 0.18s ease;
-      text-align: left;
-      color: var(--text-main);
-    }
-    .pz-card:hover {
-      transform: translateY(-2px);
-      border-color: var(--accent-cyan);
-    }
-    .pz-card.solved {
-      border-color: rgba(34, 197, 94, 0.45);
-    }
-    .pz-card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-    }
-    .pz-arena {
-      display: grid;
-      grid-template-columns: minmax(290px, 560px) minmax(260px, 1fr);
+      grid-template-columns: minmax(280px, 520px) minmax(260px, 1fr);
       gap: 20px;
       align-items: start;
     }
-    .pz-panel {
+    .pz-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pz-list { display: flex; flex-direction: column; gap: 8px; }
+    .pz-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 11px;
+      padding: 11px 13px;
       display: flex;
-      flex-direction: column;
-      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      color: var(--text-main);
+      text-align: left;
     }
+    .pz-item:hover, .pz-item.active {
+      border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .pz-item.solved { border-left: 4px solid #22c55e; }
     .pz-feedback {
       border-radius: 10px;
-      padding: 11px 13px;
+      padding: 10px 12px;
       font-size: 0.84rem;
-      line-height: 1.48;
+      line-height: 1.45;
       background: rgba(9, 13, 22, 0.65);
       border: 1px solid var(--border-color);
-      border-left: 4px solid var(--accent-cyan);
     }
-    .pz-feedback.ok {
-      border-left-color: #22c55e;
-      background: rgba(34, 197, 94, 0.12);
-    }
-    .pz-feedback.err {
-      border-left-color: #f43f5e;
-      background: rgba(244, 63, 94, 0.14);
-    }
-    .pz-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    @media (max-width: 880px) {
-      .pz-arena { grid-template-columns: 1fr; }
+    .pz-feedback.ok { border-color: #22c55e; color: #86efac; }
+    .pz-feedback.err { border-color: #f43f5e; color: #fda4af; }
+    .pz-feedback.hint { border-color: #facc15; color: #fde047; }
+    .pz-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 860px) {
+      .pz-layout { grid-template-columns: 1fr; }
     }
   `;
   document.head.appendChild(style);
 }
 
-export function algToRC(alg) {
-  const file = alg[0];
-  const rank = parseInt(alg[1], 10);
-  return { r: 8 - rank, c: FILES.indexOf(file) };
-}
-
-export function loadFenIntoEngine(engine, fen) {
-  const parts = fen.trim().split(/\s+/);
-  const rows = parts[0].split('/');
-  const turn = parts[1] === 'b' ? 'b' : 'w';
-
-  engine.board = Array.from({ length: 8 }, () => new Array(8).fill(null));
-  for (let r = 0; r < 8; r++) {
-    let c = 0;
-    for (const ch of rows[r]) {
-      if (ch >= '1' && ch <= '8') {
-        c += parseInt(ch, 10);
-      } else {
-        const isWhite = ch === ch.toUpperCase();
-        engine.board[r][c] = {
-          color: isWhite ? 'w' : 'b',
-          type: ch.toUpperCase()
-        };
-        c++;
-      }
-    }
-  }
-
-  engine.turn = turn;
-  engine.castling = { w: { K: false, Q: false }, b: { K: false, Q: false } };
-  engine.epTarget = null;
-  engine.halfmoveClock = 0;
-  engine.fullmoveNumber = 1;
-  engine.history = [];
-  engine.captured = { w: [], b: [] };
-  engine.status = 'playing';
-  engine.winner = null;
-}
-
 export class PuzzlesView {
-  constructor({ rootEl, store, getCurrentThemeId, onBackHome, onOpenSubscription }) {
+  constructor({ container, sound, store, getThemeId, onBack }) {
     ensurePuzzleStyles();
-    this.rootEl = rootEl;
+    this.container = container;
+    this.sound = sound;
     this.store = store;
-    this.getCurrentThemeId = getCurrentThemeId;
-    this.onBackHome = onBackHome;
-    this.onOpenSubscription = onOpenSubscription;
+    this.getThemeId = getThemeId;
+    this.onBack = onBack;
 
-    this.sound = new SoundFX();
-    this.filter = 'all';
-    this.solved = this._loadSolved();
-    this.activePuzzle = null;
-    this.engine = null;
-    this.fx = null;
+    this.filterVariant = 'classic';
+    this.solvedIds = this._loadSolved();
+    this.currentPuzzle = PUZZLE_BANK[0];
     this.stepIdx = 0;
     this.selected = null;
     this.legalForSelected = [];
     this.hiddenSquares = new Set();
     this.defeatedKingSq = null;
-    this.hintMove = null;
     this.isAnimating = false;
-    this.completed = false;
-    this.failedOnce = false;
-    this.feedback = null;
-    this._animToken = 0;
+    this.solvedNow = false;
+    this.feedback = { cls: '', text: '' };
+    this.fx = null;
+
+    this.engine = new Chess960Engine(518);
+    this._mountLayout();
+    this.loadPuzzle(PUZZLE_BANK[0]);
   }
 
   _loadSolved() {
     try {
-      const raw = localStorage.getItem(SOLVED_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return new Set(Array.isArray(arr) ? arr : []);
+      const raw = localStorage.getItem(PUZZLES_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
     } catch {
       return new Set();
     }
@@ -306,205 +223,159 @@ export class PuzzlesView {
 
   _saveSolved() {
     try {
-      localStorage.setItem(SOLVED_KEY, JSON.stringify([...this.solved]));
+      localStorage.setItem(PUZZLES_KEY, JSON.stringify([...this.solvedIds]));
     } catch { /* ignorar */ }
   }
 
-  _theme() {
-    const id = this.getCurrentThemeId ? this.getCurrentThemeId() : 'neon';
+  destroy() {
+    this.fx?.cancelActive();
+  }
+
+  _getTheme() {
+    const id = this.getThemeId?.() || 'neon';
     return THEMES[id] || THEMES.neon;
   }
 
-  destroy() {
-    this._animToken++;
-    if (this.fx) this.fx.cancelActive();
-    this.fx = null;
-  }
-
-  render() {
-    if (this.activePuzzle) {
-      this._renderSolverShell();
-    } else {
-      this._renderCatalog();
-    }
-  }
-
-  _renderCatalog() {
-    this.destroy();
-    const hasPro = this.store.hasAccess('pro_puzzles');
-    const list = PUZZLE_BANK.filter(p => this.filter === 'all' || p.variant === this.filter);
-
-    this.rootEl.innerHTML = `
+  _mountLayout() {
+    this.container.innerHTML = `
       <div class="sec-head">
         <div>
-          <h2>🧩 Problemas Tácticos (${this.solved.size}/${PUZZLE_BANK.length})</h2>
-          <p class="sec-sub">Resuelve mates y combinaciones en Ajedrez Clásico y Fischer 960 con tus animaciones de combate.</p>
+          <h2>🧩 Problemas Tácticos (Clásico y Fischer 960)</h2>
+          <p class="sec-sub">Encuentra la jugada ganadora con tus animaciones de combate y explosión de Jaque Mate.</p>
         </div>
-        <button class="btn btn-secondary" id="pz-back-home">← Volver al Inicio</button>
+        <button id="pz-back" class="btn btn-secondary">← Volver al Inicio</button>
       </div>
 
       <div class="pz-tabs">
-        <button class="pz-tab ${this.filter === 'all' ? 'active' : ''}" data-filter="all">Todos (${PUZZLE_BANK.length})</button>
-        <button class="pz-tab ${this.filter === 'classic' ? 'active' : ''}" data-filter="classic">♟ Ajedrez Clásico</button>
-        <button class="pz-tab ${this.filter === 'fischer960' ? 'active' : ''}" data-filter="fischer960">🎲 Fischer 960</button>
+        <button class="btn btn-primary" data-pz-tab="classic">♟ Problemas Clásicos</button>
+        <button class="btn btn-secondary" data-pz-tab="fischer960">🎲 Problemas Fischer 960</button>
       </div>
 
-      <div class="pz-grid">
-        ${list.map(p => {
-          const isSolved = this.solved.has(p.id);
-          const locked = p.tier === 'pro' && !hasPro;
-          return `
-            <button class="pz-card ${isSolved ? 'solved' : ''}" data-open-pz="${p.id}" data-locked="${locked}">
-              <div class="pz-card-top">
-                <span class="curr-pill">${p.variant === 'classic' ? '♟ CLÁSICO' : '🎲 960'} · ${p.difficulty}</span>
-                <span class="mode-card-tag ${locked ? 'soon' : ''}">
-                  ${locked ? '🔒 PRO' : (isSolved ? '✓ RESUELTO' : 'JUGAR')}
-                </span>
-              </div>
-              <h3 style="font-size:0.98rem">${p.title}</h3>
-              <p class="sec-sub">${p.theme}</p>
-            </button>
-          `;
-        }).join('')}
+      <div class="pz-layout">
+        <div class="board-column">
+          <div class="board-wrapper" id="pz-board-wrapper">
+            <div class="board-grid" id="pz-board-grid"></div>
+            <canvas class="fx-canvas" id="pz-fx-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="side-panel">
+          <div class="card" style="display:flex;flex-direction:column;gap:10px">
+            <div class="status-row">
+              <span class="pos-badge" id="pz-badge"></span>
+              <span class="turn-pill" id="pz-level"></span>
+            </div>
+            <h3 id="pz-title" style="font-size:1.05rem"></h3>
+            <p class="status-text" id="pz-goal"></p>
+            <div class="pz-feedback" id="pz-feedback">Toca una pieza blanca para iniciar el reto.</div>
+            <div class="pz-actions">
+              <button id="pz-hint" class="btn btn-secondary">💡 Pista</button>
+              <button id="pz-retry" class="btn btn-secondary">↺ Reintentar</button>
+              <button id="pz-next" class="btn btn-primary">Siguiente →</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Lista de Retos</h2>
+              <span class="mini-hint" id="pz-counter"></span>
+            </div>
+            <div class="pz-list" id="pz-list"></div>
+          </div>
+        </div>
       </div>
     `;
 
-    this.rootEl.querySelector('#pz-back-home')?.addEventListener('click', () => this.onBackHome());
-    this.rootEl.querySelectorAll('.pz-tab').forEach(btn => {
+    this.dom = {
+      wrapper: this.container.querySelector('#pz-board-wrapper'),
+      grid: this.container.querySelector('#pz-board-grid'),
+      canvas: this.container.querySelector('#pz-fx-canvas'),
+      badge: this.container.querySelector('#pz-badge'),
+      level: this.container.querySelector('#pz-level'),
+      title: this.container.querySelector('#pz-title'),
+      goal: this.container.querySelector('#pz-goal'),
+      feedback: this.container.querySelector('#pz-feedback'),
+      list: this.container.querySelector('#pz-list'),
+      counter: this.container.querySelector('#pz-counter')
+    };
+
+    this.fx = new CombatFX(this.dom.canvas, this.dom.wrapper);
+    this.fx.setPalette(this._getTheme().fxPalette);
+
+    this.container.querySelector('#pz-back').addEventListener('click', () => {
+      this.destroy();
+      this.onBack?.();
+    });
+
+    this.container.querySelectorAll('[data-pz-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.filter = btn.dataset.filter;
-        this._renderCatalog();
+        this.filterVariant = btn.dataset.pzTab;
+        this.container.querySelectorAll('[data-pz-tab]').forEach(b => {
+          b.className = b.dataset.pzTab === this.filterVariant ? 'btn btn-primary' : 'btn btn-secondary';
+        });
+        const first = PUZZLE_BANK.find(p => p.variant === this.filterVariant);
+        if (first) this.loadPuzzle(first);
       });
     });
-    this.rootEl.querySelectorAll('[data-open-pz]').forEach(card => {
-      card.addEventListener('click', () => {
-        if (card.dataset.locked === 'true') {
-          this.onOpenSubscription();
-          return;
-        }
-        const pz = PUZZLE_BANK.find(x => x.id === card.dataset.openPz);
-        if (pz) this.openPuzzle(pz);
-      });
+
+    this.container.querySelector('#pz-hint').addEventListener('click', () => {
+      this.feedback = { cls: 'hint', text: `💡 Pista: ${this.currentPuzzle.hint}` };
+      this._renderInfo();
+    });
+
+    this.container.querySelector('#pz-retry').addEventListener('click', () => {
+      this.loadPuzzle(this.currentPuzzle);
+    });
+
+    this.container.querySelector('#pz-next').addEventListener('click', () => {
+      const subset = PUZZLE_BANK.filter(p => p.variant === this.filterVariant);
+      const idx = subset.findIndex(p => p.id === this.currentPuzzle.id);
+      const next = subset[(idx + 1) % subset.length];
+      if (next) this.loadPuzzle(next);
     });
   }
 
-  openPuzzle(puzzle) {
-    this.destroy();
-    this.activePuzzle = puzzle;
-    this.engine = new Chess960Engine(518);
-    loadFenIntoEngine(this.engine, puzzle.fen);
-
+  loadPuzzle(puzzle) {
+    this.fx?.cancelActive();
+    this.currentPuzzle = puzzle;
     this.stepIdx = 0;
     this.selected = null;
     this.legalForSelected = [];
     this.hiddenSquares.clear();
     this.defeatedKingSq = null;
-    this.hintMove = null;
     this.isAnimating = false;
-    this.completed = false;
-    this.failedOnce = false;
-    this.feedback = {
-      type: 'info',
-      text: `Turno de ${this.engine.turn === 'w' ? 'Blancas' : 'Negras'}. Encuentra la mejor jugada (${puzzle.theme}).`
-    };
+    this.solvedNow = false;
+    this.feedback = { cls: '', text: 'Encuentra la mejor jugada para las Blancas.' };
 
-    this._renderSolverShell();
+    // Cargar posición personalizada sobre el motor puro
+    this.engine.reset(518);
+    this.engine.board = Array.from({ length: 8 }, () => new Array(8).fill(null));
+    for (const [color, type, sq] of puzzle.pieces) {
+      const { r, c } = parseSq(sq);
+      this.engine.board[r][c] = { color, type };
+    }
+    this.engine.turn = puzzle.turn || 'w';
+    this.engine.startCols = puzzle.startCols || { king: 4, rookQ: 0, rookK: 7 };
+    this.engine.castling = puzzle.castling
+      ? { w: { ...puzzle.castling.w }, b: { ...puzzle.castling.b } }
+      : { w: { K: false, Q: false }, b: { K: false, Q: false } };
+    this.engine.epTarget = null;
+    this.engine.history = [];
+    this.engine.status = 'playing';
+    this.engine.winner = null;
+
+    this.fx?.setPalette(this._getTheme().fxPalette);
+    this._renderAll();
   }
 
-  _renderSolverShell() {
-    const p = this.activePuzzle;
-    const theme = this._theme();
-
-    this.rootEl.innerHTML = `
-      <div class="sec-head">
-        <div>
-          <h2>🧩 ${p.title} <span class="curr-pill" style="vertical-align:middle">${p.variant === 'classic' ? '♟ Clásico' : '🎲 Fischer 960'} · ${p.difficulty}</span></h2>
-          <p class="sec-sub">${p.theme}</p>
-        </div>
-        <button class="btn btn-secondary" id="pz-back-list">← Lista de Problemas</button>
-      </div>
-
-      <div class="pz-arena">
-        <div class="board-stage">
-          <div class="board-wrapper" id="pz-board-wrapper">
-            <div class="board-grid" id="pz-board-grid"></div>
-            <svg class="tactical-svg" id="pz-svg" viewBox="0 0 800 800" preserveAspectRatio="none"></svg>
-            <canvas class="fx-canvas" id="pz-fx-canvas"></canvas>
-          </div>
-        </div>
-
-        <div class="pz-panel">
-          <div class="card">
-            <div class="card-header">
-              <h2>Objetivo Táctico</h2>
-              <span class="pos-badge">${this.solved.has(p.id) ? '✓ Resuelto' : 'En curso'}</span>
-            </div>
-            <div class="pz-feedback" id="pz-feedback"></div>
-          </div>
-
-          <div class="card">
-            <div class="pz-actions">
-              <button class="btn btn-secondary" id="pz-hint">💡 Pista</button>
-              <button class="btn btn-secondary" id="pz-retry">↺ Reiniciar</button>
-              <button class="btn btn-primary" id="pz-next">Siguiente Problema →</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    this.boardWrapper = this.rootEl.querySelector('#pz-board-wrapper');
-    this.boardGrid = this.rootEl.querySelector('#pz-board-grid');
-    this.svgEl = this.rootEl.querySelector('#pz-svg');
-    this.fxCanvas = this.rootEl.querySelector('#pz-fx-canvas');
-    this.feedbackEl = this.rootEl.querySelector('#pz-feedback');
-
-    this.fx = new CombatFX(this.fxCanvas, this.boardWrapper);
-    this.fx.setPalette(theme.fxPalette);
-    requestAnimationFrame(() => this.fx?._resize());
-
-    this.rootEl.querySelector('#pz-back-list')?.addEventListener('click', () => {
-      this.activePuzzle = null;
-      this._renderCatalog();
-    });
-    this.rootEl.querySelector('#pz-retry')?.addEventListener('click', () => {
-      this.openPuzzle(this.activePuzzle);
-    });
-    this.rootEl.querySelector('#pz-hint')?.addEventListener('click', () => this._showHint());
-    this.rootEl.querySelector('#pz-next')?.addEventListener('click', () => this._openNextPuzzle());
-
-    this._renderBoardAndFeedback();
-  }
-
-  _showHint() {
-    if (this.completed || this.isAnimating) return;
-    const expectedUci = this.activePuzzle.solution[this.stepIdx];
-    if (!expectedUci) return;
-    this.hintMove = {
-      from: algToRC(expectedUci.slice(0, 2)),
-      to: algToRC(expectedUci.slice(2, 4))
-    };
-    this.feedback = { type: 'info', text: `💡 Pista: ${this.activePuzzle.hint}` };
-    this._renderBoardAndFeedback();
-  }
-
-  _openNextPuzzle() {
-    const hasPro = this.store.hasAccess('pro_puzzles');
-    const available = PUZZLE_BANK.filter(p => (this.filter === 'all' || p.variant === this.filter) && (p.tier === 'free' || hasPro));
-    if (!available.length) return;
-    const idx = available.findIndex(p => p.id === this.activePuzzle.id);
-    const next = available[(idx + 1) % available.length];
-    this.openPuzzle(next);
-  }
-
-  _handleSquareClick(r, c) {
-    if (this.isAnimating || this.completed) return;
+  _handleClick(r, c) {
+    if (this.isAnimating || this.solvedNow) return;
 
     if (this.selected) {
-      const candidates = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c);
+      const candidates = this._matchMovesForClick(r, c);
       if (candidates.length > 0) {
-        const chosen = candidates.find(m => m.promo === 'Q') || candidates[0];
-        this._validatePlayerMove(chosen);
+        const chosen = candidates.find(m => !m.promo || m.promo === 'Q') || candidates[0];
+        this._checkUserMove(chosen);
         return;
       }
     }
@@ -518,91 +389,66 @@ export class PuzzlesView {
         this.selected = { r, c };
         this.legalForSelected = this.engine.getLegalMovesFrom(r, c);
       }
-      this._renderBoardAndFeedback();
+      this._renderBoard();
     } else {
       this.selected = null;
       this.legalForSelected = [];
-      this._renderBoardAndFeedback();
+      this._renderBoard();
     }
   }
 
-  _validatePlayerMove(move) {
-    const expectedUci = this.activePuzzle.solution[this.stepIdx];
-    const expFrom = algToRC(expectedUci.slice(0, 2));
-    const expTo = algToRC(expectedUci.slice(2, 4));
+  _matchMovesForClick(r, c) {
+    const direct = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c);
+    if (direct.length > 0) return direct;
+    return this.legalForSelected.filter(m => m.castle && m.from.r === r && m.kingToCol === c);
+  }
 
-    const exactMatch =
-      move.from.r === expFrom.r &&
-      move.from.c === expFrom.c &&
-      move.to.r === expTo.r &&
-      move.to.c === expTo.c;
+  _checkUserMove(move) {
+    const expected = this.currentPuzzle.solution[this.stepIdx];
+    const playedUci = toUci(move.from, move.to);
 
-    // Aceptar también cualquier jugada alternativa que dé jaque mate directo en el paso final
-    let altMate = false;
-    if (!exactMatch && this.stepIdx === this.activePuzzle.solution.length - 1) {
-      const sim = this.engine.clone();
-      sim.makeMove(move);
-      if (sim.status === 'checkmate') altMate = true;
-    }
-
-    if (!exactMatch && !altMate) {
-      this.failedOnce = true;
+    if (playedUci !== expected) {
       this.selected = null;
       this.legalForSelected = [];
-      this.sound.playCheck();
-      this.feedback = {
-        type: 'err',
-        text: 'Esa jugada no es la más precisa. Intenta de nuevo o toca 💡 Pista.'
-      };
-      this._renderBoardAndFeedback();
+      this.feedback = { cls: 'err', text: '❌ Esa no es la jugada más precisa. Intenta de nuevo o usa una pista.' };
+      this.sound?.playCheck();
+      this._renderAll();
       return;
     }
 
-    this.hintMove = null;
-    this._executeAnimatedMove(move, () => {
+    this._animateAndApply(move, () => {
       this.stepIdx++;
-
-      if (this.stepIdx >= this.activePuzzle.solution.length || this.engine.status === 'checkmate') {
-        this.completed = true;
-        const firstTime = !this.solved.has(this.activePuzzle.id);
-        this.solved.add(this.activePuzzle.id);
+      if (this.stepIdx >= this.currentPuzzle.solution.length) {
+        this.solvedNow = true;
+        this.solvedIds.add(this.currentPuzzle.id);
         this._saveSolved();
-        if (firstTime) {
-          this.store.addMessage({
-            icon: '🧩',
-            title: `Problema resuelto: ${this.activePuzzle.title}`, body: this.activePuzzle.explain }); this.store.save(); } this.feedback = { type: 'ok', text: `¡Excelente! ${this.activePuzzle.explain}`
-        };
-        this._renderBoardAndFeedback();
+        this.feedback = { cls: 'ok', text: '✅ ¡Problema resuelto con éxito! Excelente visión táctica.' };
+        this._renderAll();
         return;
       }
 
-      this.feedback = { type: 'ok', text: '¡Correcto! Sigue con la combinación...' };
-      this._renderBoardAndFeedback();
-
-      // Respuesta automática del rival
-      const replyUci = this.activePuzzle.solution[this.stepIdx];
-      const rf = algToRC(replyUci.slice(0, 2));
-      const rt = algToRC(replyUci.slice(2, 4));
-      const token = this._animToken;
-
-      setTimeout(() => {
-        if (token !== this._animToken || !this.engine) return;
-        const legal = this.engine.getLegalMoves(this.engine.turn);
-        const replyMove = legal.find(m => m.from.r === rf.r && m.from.c === rf.c && m.to.r === rt.r && m.to.c === rt.c);
-        if (!replyMove) return;
-
-        this._executeAnimatedMove(replyMove, () => {
-          this.stepIdx++;
-          this.feedback = { type: 'info', text: 'Tu turno: remata la combinación.' };
-          this._renderBoardAndFeedback();
-        });
-      }, 360);
+      // Ejecutar respuesta automática del rival
+      this.feedback = { cls: 'ok', text: '✓ ¡Bien visto! El rival responde... encuentra el remate.' };
+      this._renderInfo();
+      setTimeout(() => this._playOpponentReply(), 320);
     });
   }
 
-  _executeAnimatedMove(move, onDone) {
-    const token = ++this._animToken;
-    const theme = this._theme();
+  _playOpponentReply() {
+    const replyUci = this.currentPuzzle.solution[this.stepIdx];
+    if (!replyUci) return;
+    const legal = this.engine.getLegalMoves(this.engine.turn);
+    const match = legal.find(m => toUci(m.from, m.to) === replyUci);
+    if (!match) return;
+
+    this._animateAndApply(match, () => {
+      this.stepIdx++;
+      this._renderAll();
+    });
+  }
+
+  _animateAndApply(move, onDone) {
+    const theme = this._getTheme();
     const moverColor = this.engine.turn;
     const enemyColor = moverColor === 'w' ? 'b' : 'w';
     const record = this.engine.makeMove(move);
@@ -613,28 +459,24 @@ export class PuzzlesView {
     this.hiddenSquares.clear();
 
     const finish = () => {
-      if (token !== this._animToken) return;
       this.hiddenSquares.clear();
-
       if (this.engine.status === 'checkmate') {
         const kSq = this.engine.findKing(enemyColor);
         if (kSq) {
           this.hiddenSquares.add(`${kSq.r},${kSq.c}`);
-          this._renderBoardAndFeedback();
-          this.sound.playCheckmateDefeat();
-
+          this._renderBoard();
+          this.sound?.playCheckmateDefeat();
           this.fx.playCheckmateSequence({
             kingHtml: theme.renderPiece('K', enemyColor),
             kingSq: kSq,
             flipped: false,
             winnerColor: moverColor,
             onComplete: () => {
-              if (token !== this._animToken) return;
               this.hiddenSquares.clear();
               this.defeatedKingSq = kSq;
               this.isAnimating = false;
-              this._renderBoardAndFeedback();
-              if (onDone) onDone();
+              this._renderBoard();
+              onDone?.();
             }
           });
           return;
@@ -642,15 +484,34 @@ export class PuzzlesView {
       }
 
       this.isAnimating = false;
-      if (record.inCheck) this.sound.playCheck();
-      this._renderBoardAndFeedback();
-      if (onDone) onDone();
+      this._renderBoard();
+      if (record.inCheck) this.sound?.playCheck();
+      onDone?.();
     };
+
+    if (record.castle) {
+      const row = record.from.r;
+      this.hiddenSquares.add(`${row},${record.kingToCol}`);
+      this.hiddenSquares.add(`${row},${record.rookToCol}`);
+      this._renderBoard();
+      this.sound?.playCastle();
+      this.fx.animateCastle({
+        kingHtml: theme.renderPiece('K', moverColor),
+        rookHtml: theme.renderPiece('R', moverColor),
+        row,
+        kingFrom: record.from.c,
+        kingTo: record.kingToCol,
+        rookFrom: record.rookFromCol,
+        rookTo: record.rookToCol,
+        flipped: false,
+        onComplete: finish
+      });
+      return;
+    }
 
     if (record.captured) {
       this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
-      this._renderBoardAndFeedback();
-
+      this._renderBoard();
       this.fx.playCombatSequence({
         pieceType: record.piece,
         attackerHtml: theme.renderPiece(record.promo || record.piece, moverColor),
@@ -658,17 +519,16 @@ export class PuzzlesView {
         from: record.from,
         to: record.to,
         flipped: false,
-        onCharge: () => this.sound.playCharge(record.piece),
-        onImpact: () => this.sound.playAttack(record.piece),
+        onCharge: () => this.sound?.playCharge(record.piece),
+        onImpact: () => this.sound?.playAttack(record.piece),
         onComplete: finish
       });
       return;
     }
 
     this.hiddenSquares.add(`${record.to.r},${record.to.c}`);
-    this._renderBoardAndFeedback();
-    this.sound.playMove(record.piece);
-
+    this._renderBoard();
+    this.sound?.playMove(record.piece);
     this.fx.animateRegularMove({
       pieceHtml: theme.renderPiece(record.promo || record.piece, moverColor),
       pieceType: record.piece,
@@ -679,21 +539,108 @@ export class PuzzlesView {
     });
   }
 
-  _renderBoardAndFeedback() {
-    if (!this.boardGrid || !this.engine) return;
-    const theme = this._theme();
+  _renderAll() {
+    this._renderBoard();
+    this._renderInfo();
+    this._renderList();
+  }
+
+  _renderInfo() {
+    const p = this.currentPuzzle;
+    this.dom.badge.textContent = p.variant === 'classic' ? '♟ CLÁSICO' : '🎲 FISCHER 960';
+    this.dom.level.textContent = p.level;
+    this.dom.title.textContent = p.title;
+    this.dom.goal.textContent = p.goal;
+    this.dom.feedback.className = `pz-feedback ${this.feedback.cls}`;
+    this.dom.feedback.textContent = this.feedback.text;
+  }
+
+  _renderList() {
+    const subset = PUZZLE_BANK.filter(p => p.variant === this.filterVariant);
+    const solvedInTab = subset.filter(p => this.solvedIds.has(p.id)).length;
+    this.dom.counter.textContent = `${solvedInTab}/${subset.length} resueltos`;
+
+    this.dom.list.innerHTML = subset.map(p => {
+      const done = this.solvedIds.has(p.id);
+      const active = p.id === this.currentPuzzle.id;
+      return `
+        <button class="pz-item ${active ? 'active' : ''} ${done ? 'solved' : ''}" data-pz-id="${p.id}">
+          <div>
+            <div style="font-weight:700;font-size:0.86rem">${p.title}</div>
+            <div class="mini-hint">${p.level}</div>
+          </div>
+          <span>${done ? '✅' : '▶'}</span>
+        </button>
+      `;
+    }).join('');
+
+    this.dom.list.querySelectorAll('[data-pz-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const found = PUZZLE_BANK.find(x => x.id === btn.dataset.pzId);
+        if (found) this.loadPuzzle(found);
+      });
+    });
+  }
+
+  _renderBoard() {
+    const theme = this._getTheme();
+    const grid = this.dom.grid;
+    grid.innerHTML = '';
+
     const lastMove = this.engine.history[this.engine.history.length - 1] || null;
     const checkKing = this.engine.isInCheck(this.engine.turn)
       ? this.engine.findKing(this.engine.turn)
       : null;
 
-    this.boardGrid.innerHTML = '';
-
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const sq = document.createElement('div');
-        sq.className = `square ${(r + c) \% 2 === 0 ? 'light' : 'dark'}`;  if (lastMove) { if (lastMove.from.r === r && lastMove.from.c === c) sq.classList.add('last-from'); if (lastMove.to.r === r && lastMove.to.c === c) sq.classList.add('last-to'); } if (this.selected && this.selected.r === r && this.selected.c === c) { sq.classList.add('selected'); } if (checkKing && checkKing.r === r && checkKing.c === c) { sq.classList.add('in-check'); }  const matching = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c); if (matching.length > 0) { const isCap = matching.some(m => m.captured \vert{}\vert{} m.ep); const marker = document.createElement('div'); marker.className = isCap ? 'capture-ring' : 'move-dot'; sq.appendChild(marker); }  if (c === 0) { const rankEl = document.createElement('span'); rankEl.className = 'coord-rank'; rankEl.textContent = 8 - r; sq.appendChild(rankEl); } if (r === 7) { const fileEl = document.createElement('span'); fileEl.className = 'coord-file'; fileEl.textContent = FILES[c]; sq.appendChild(fileEl); }  const piece = this.engine.board[r][c]; if (piece && !this.hiddenSquares.has(`${r},${c}`)) { const wrap = document.createElement('div'); wrap.className = 'piece-wrap'; if ( piece.type === 'K' && this.defeatedKingSq && this.defeatedKingSq.r === r && this.defeatedKingSq.c === c ) { wrap.classList.add('king-defeated'); } wrap.innerHTML = theme.renderPiece(piece.type, piece.color); sq.appendChild(wrap); }  sq.addEventListener('click', () => this._handleSquareClick(r, c)); this.boardGrid.appendChild(sq); } }  // Flecha verde de pista this.svgEl.innerHTML = ''; if (this.hintMove) { const ns = 'http://www.w3.org/2000/svg'; const x1 = this.hintMove.from.c * 100 + 50; const y1 = this.hintMove.from.r * 100 + 50; const x2 = this.hintMove.to.c * 100 + 50; const y2 = this.hintMove.to.r * 100 + 50; const dx = x2 - x1; const dy = y2 - y1; const len = Math.hypot(dx, dy) \vert{}\vert{} 1; const ux = dx / len; const uy = dy / len;  const line = document.createElementNS(ns, 'line'); line.setAttribute('x1', x1 + ux * 18); line.setAttribute('y1', y1 + uy * 18); line.setAttribute('x2', x2 - ux * 26); line.setAttribute('y2', y2 - uy * 26); line.setAttribute('stroke', '#22c55e'); line.setAttribute('stroke-width', '14'); line.setAttribute('stroke-linecap', 'round'); line.setAttribute('opacity', '0.88'); this.svgEl.appendChild(line);  const tipX = x2 - ux * 6; const tipY = y2 - uy * 6; const baseX = x2 - ux * 32; const baseY = y2 - uy * 32; const px = -uy * 16; const py = ux * 16; const head = document.createElementNS(ns, 'polygon'); head.setAttribute('points', `${tipX},${tipY}${baseX + px},${baseY + py}${baseX - px},${baseY - py}`); head.setAttribute('fill', '#22c55e'); head.setAttribute('opacity', '0.88'); this.svgEl.appendChild(head); }  if (this.feedbackEl && this.feedback) { this.feedbackEl.className = `pz-feedback ${this.feedback.type === 'ok' ? 'ok' : this.feedback.type === 'err' ? 'err' : ''}`;
-      this.feedbackEl.textContent = this.feedback.text;
+        sq.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
+
+        if (lastMove) {
+          const toCol = lastMove.castle ? lastMove.kingToCol : lastMove.to.c;
+          if (lastMove.from.r === r && lastMove.from.c === c) sq.classList.add('last-from');
+          if (lastMove.to.r === r && toCol === c) sq.classList.add('last-to');
+        }
+        if (this.selected && this.selected.r === r && this.selected.c === c) sq.classList.add('selected');
+        if (checkKing && checkKing.r === r && checkKing.c === c) sq.classList.add('in-check');
+
+        const matching = this.legalForSelected.filter(m => m.to.r === r && m.to.c === c);
+        if (matching.some(m => m.castle)) {
+          sq.classList.add('castle-target');
+        } else if (matching.length > 0) {
+          const marker = document.createElement('div');
+          marker.className = matching.some(m => m.captured || m.ep) ? 'capture-ring' : 'move-dot';
+          sq.appendChild(marker);
+        }
+
+        if (c === 0) {
+          const rk = document.createElement('span');
+          rk.className = 'coord-rank';
+          rk.textContent = 8 - r;
+          sq.appendChild(rk);
+        }
+        if (r === 7) {
+          const fl = document.createElement('span');
+          fl.className = 'coord-file';
+          fl.textContent = FILES[c];
+          sq.appendChild(fl);
+        }
+
+        const piece = this.engine.board[r][c];
+        if (piece && !this.hiddenSquares.has(`${r},${c}`)) {
+          const wrap = document.createElement('div');
+          wrap.className = 'piece-wrap';
+          if (piece.type === 'K' && this.defeatedKingSq && this.defeatedKingSq.r === r && this.defeatedKingSq.c === c) {
+            wrap.classList.add('king-defeated');
+          }
+          wrap.innerHTML = theme.renderPiece(piece.type, piece.color);
+          sq.appendChild(wrap);
+        }
+
+        sq.addEventListener('click', () => this._handleClick(r, c));
+        grid.appendChild(sq);
+      }
     }
   }
 }
