@@ -7,6 +7,7 @@ import { attachStockfishLevels } from './ai_levels.js';
 import { attachMobileAndStoreReady } from './mobile.js';
 import { runCinematicIntro } from './intro.js';
 import { attachAuthSystem } from './auth.js';
+import { attachCoachAvatar } from './coach_avatar.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -46,6 +47,9 @@ function attachPlugins() {
   // Fase 11: Sistema de Cuentas e Invitado tras finalizar la intro
   const auth = attachAuthSystem(app);
   introPromise.then(() => auth.ensureSession({ skipIfInvite: true }));
+
+  // Fase 12: Avatar Animado del Entrenador sincronizado con la voz
+  attachCoachAvatar(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
