@@ -1,4 +1,4 @@
-import { Chess960Engine, FILES } from './engine.js';
+import { Chess960Engine, FILES, PIECE_VALUES } from './engine.js';
 import { CombatFX } from './fx.js';
 import { THEMES } from './themes.js';
 import { PUZZLE_LEVELS, PUZZLES } from './data/puzzles_data.js';
@@ -58,6 +58,15 @@ function ensureTrainerStyles() {
     .tr-feedback.task { border-left-color: #facc15; color: #fef08a; background: rgba(250, 204, 21, 0.08); }
     .tr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .square.hint-sq { box-shadow: inset 0 0 0 3px #facc15; }
+    .square.pz-wrong-sq { box-shadow: inset 0 0 0 3px #ef4444; background-color: rgba(239, 68, 68, 0.34) !important; }
+    .pz-wrong-x {
+      position: absolute; top: 3px; right: 3px; z-index: 14;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: #ef4444; color: #ffffff; font-weight: 900; font-size: 0.85rem;
+      display: grid; place-items: center; box-shadow: 0 2px 10px rgba(239, 68, 68, 0.75);
+      animation: pzShake 0.35s ease;
+    }
+    @keyframes pzShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
     @media (max-width: 860px) { .tr-layout { grid-template-columns: 1fr; } }
   `;
   document.head.appendChild(style);
@@ -79,8 +88,14 @@ function loadFenIntoEngine(fen) {
     }
   }
   eng.turn = parts[1] === 'b' ? 'b' : 'w';
-  eng.castling = { w: { K: false, Q: false }, b: { K: false, Q: false } };
-  eng.epTarget = null;
+  const castleStr = parts[2] || '-';
+  eng.castling = {
+    w: { K: castleStr.includes('K'), Q: castleStr.includes('Q') },
+    b: { K: castleStr.includes('k'), Q: castleStr.includes('q') }
+  };
+  eng.epTarget = (parts[3] && parts[3] !== '-' && parts[3].length === 2)
+    ? { r: 8 - parseInt(parts[3][1], 10), c: FILES.indexOf(parts[3][0]) }
+    : null;
   eng.history = [];
   eng.status = 'playing';
   eng.winner = null;
@@ -95,6 +110,26 @@ function uciToCoords(uci) {
   };
 }
 
+function findLegalMoveByUci(engine, uci) {
+  if (!uci || uci.length < 4) return null;
+  const exp = uciToCoords(uci);
+  const legal = engine.getLegalMoves(engine.turn);
+  const direct = legal.find(m =>
+    m.from.r === exp.from.r && m.from.c === exp.from.c &&
+    m.to.r === exp.to.r && m.to.c === exp.to.c &&
+    (!exp.promo || m.promo === exp.promo)
+  );
+  if (direct) return direct;
+
+  // Enroque en UCI (ej. e1g1 o e1h1)
+  const p = engine.board[exp.from.r]?.[exp.from.c];
+  if (p && p.type === 'K' && Math.abs(exp.to.c - exp.from.c) >= 2) {
+    const side = exp.to.c > exp.from.c ? 'K' : 'Q';
+    return legal.find(m => m.castle === side) || null;
+  }
+  return null;
+}
+
 export class PuzzleTrainer {
   constructor(app) {
     ensureTrainerStyles();
@@ -105,9 +140,12 @@ export class PuzzleTrainer {
     this.solved = this._loadSolved();
     this.fx = null;
     this.busy = false;
+    this.playerColor = 'w';
     this.hidden = new Set();
     this.hintSquares = new Set();
+    this.wrongSqKey = null;
     this.defeatedKingSq = null;
+    this._runToken = 0;
   }
 
   _loadSolved() {
@@ -121,6 +159,7 @@ export class PuzzleTrainer {
   }
 
   stop() {
+    this._runToken++;
     this.busy = false;
     this.fx?.cancelActive();
   }
@@ -136,12 +175,13 @@ export class PuzzleTrainer {
     );
   }
 
-  loadPuzzle(id) {
-    const p = PUZZLES.find(item => item.id === id) || PUZZLES[0];
+  _startPuzzleObject(p) {
+    this._runToken++;
     this.puzzle = p;
-    this.level = p.level;
     this.currentId = p.id;
+    if (p.level) this.level = p.level;
     this.engine = loadFenIntoEngine(p.fen);
+    this.playerColor = this.engine.turn;
     this.stepIdx = 0;
     this.selected = null;
     this.legal = [];
@@ -149,12 +189,23 @@ export class PuzzleTrainer {
     this.done = false;
     this.hidden.clear();
     this.hintSquares.clear();
+    this.wrongSqKey = null;
     this.defeatedKingSq = null;
     this.feedback = {
       type: 'info',
-      text: `Tu turno (${this.engine.turn === 'w' ? 'Blancas' : 'Negras'}). Encuentra la secuencia exacta.`
+      text: `Tu turno (${this.playerColor === 'w' ? 'Blancas' : 'Negras'}). Encuentra la jugada ganadora.`
     };
     this._renderScaffold();
+  }
+
+  loadPuzzle(id) {
+    const p = PUZZLES.find(item => item.id === id) || PUZZLES[0];
+    this._startPuzzleObject(p);
+  }
+
+  loadExternalPuzzle(puzzleObj) {
+    if (!puzzleObj) return;
+    this._startPuzzleObject(puzzleObj);
   }
 
   _renderScaffold() {
@@ -162,12 +213,13 @@ export class PuzzleTrainer {
     const list = this._filteredList();
     const isPro = this.app.store.hasAccess('pro_puzzles');
     const lvlInfo = PUZZLE_LEVELS.find(l => l.id === this.level) || PUZZLE_LEVELS[0];
+    const eloBadge = this.puzzle.rating ? `ELO ${this.puzzle.rating}` : `${lvlInfo.elo} ELO`;
 
     this.container.innerHTML = `
       <div class="sec-head" style="margin-bottom:12px">
         <div>
-          <h2>🧩 Problemas Tácticos (${this.solved.size}/${PUZZLES.length})</h2>
-          <p class="sec-sub">Entrenamiento estratificado en 4 niveles para Ajedrez Clásico y Fischer 960.</p>
+          <h2>🧩 Problemas Tácticos (${this.solved.size} resueltos)</h2>
+          <p class="sec-sub">4 niveles progresivos + Problema del Día en vivo. Si fallas, el rival castiga tu jugada.</p>
         </div>
         <button class="btn btn-secondary" id="pz-home">← Inicio</button>
       </div>
@@ -178,7 +230,7 @@ export class PuzzleTrainer {
           const doneInLvl = allInLvl.filter(x => this.solved.has(x.id)).length;
           const locked = l.proOnly && !isPro;
           return `
-            <button class="tr-level-btn ${this.level === l.id ? 'active' : ''}" data-lvl="${l.id}" data-locked="${locked}">
+            <button class="tr-level-btn ${!this.puzzle.isLive && this.level === l.id ? 'active' : ''}" data-lvl="${l.id}" data-locked="${locked}">
               <strong>${locked ? '🔒 ' : ''}${l.name}</strong>
               <span>ELO ${l.elo} · ${doneInLvl}/${allInLvl.length} resueltos</span>
             </button>
@@ -209,7 +261,7 @@ export class PuzzleTrainer {
         <div class="tr-panel">
           <div class="status-row">
             <span class="pos-badge">${this.puzzle.theme}</span>
-            <span class="turn-pill">${lvlInfo.elo} ELO</span>
+            <span class="turn-pill">${eloBadge}</span>
           </div>
           <h3>${this.puzzle.title}</h3>
           <div class="tr-feedback ${this.feedback.type}" id="pz-fb">${this.feedback.text}</div>
@@ -244,12 +296,12 @@ export class PuzzleTrainer {
       this.loadPuzzle(b.dataset.pid);
     }));
     this.container.querySelector('#pz-hint').addEventListener('click', () => {
-      const exp = uciToCoords(this.puzzle.solution[this.stepIdx] || this.puzzle.solution[0]);
-      this.hintSquares = new Set([`${exp.from.r},${exp.from.c}`]);
-      this._setFeedback('task', `💡 Pista: ${this.puzzle.hint}`);
+      const mv = findLegalMoveByUci(this.engine, this.puzzle.solution[this.stepIdx] || this.puzzle.solution[0]);
+      if (mv) this.hintSquares = new Set([`${mv.from.r},${mv.from.c}`]);
+      this._setFeedback('task', `💡 Pista: ${this.puzzle.hint || 'Observa la pieza resaltada en amarillo.'}`);
       this._renderBoard();
     });
-    this.container.querySelector('#pz-retry').addEventListener('click', () => this.loadPuzzle(this.puzzle.id));
+    this.container.querySelector('#pz-retry').addEventListener('click', () => this._startPuzzleObject(this.puzzle));
     this.container.querySelector('#pz-next').addEventListener('click', () => {
       const items = this._filteredList();
       const idx = items.findIndex(x => x.id === this.puzzle.id);
@@ -279,8 +331,16 @@ export class PuzzleTrainer {
   _onSquareClick(r, c) {
     if (this.busy || this.done) return;
     if (this.selected) {
-      const match = this.legal.find(m => m.to.r === r && m.to.c === c);
-      if (match) { this._checkMove(match); return; }
+      const matches = this.legal.filter(m =>
+        (m.to.r === r && m.to.c === c) || (m.castle && m.from.r === r && m.kingToCol === c)
+      );
+      if (matches.length > 0) {
+        const expUci = this.puzzle.solution[this.stepIdx] || '';
+        const expPromo = expUci[4] ? expUci[4].toUpperCase() : 'Q';
+        const chosen = matches.find(m => m.promo === expPromo) || matches.find(m => m.promo === 'Q') || matches[0];
+        this._checkMove(chosen);
+        return;
+      }
     }
     const p = this.engine.board[r][c];
     if (p && p.color === this.engine.turn) {
@@ -293,52 +353,142 @@ export class PuzzleTrainer {
     this._renderBoard();
   }
 
+  async _findRefutationMove(wrongMove) {
+    const legal = this.engine.getLegalMoves(this.engine.turn);
+    if (!legal.length) return null;
+
+    // 1. Priorizar refutación real de Stockfish (rápida ~180 ms)
+    if (this.app.stockfish) {
+      try {
+        const ok = await this.app.stockfish.init();
+        if (ok) {
+          const res = await this.app.stockfish.evaluatePosition(this.engine, { skill: 20, depth: 7, movetime: 180 });
+          if (res?.move) return res.move;
+        }
+      } catch { /* usar respaldo local */ }
+    }
+
+    // 2. Respaldo táctico inmediato si estás offline: capturar pieza mal jugada, jaque o mejor captura
+    const destC = wrongMove.castle ? wrongMove.kingToCol : wrongMove.to.c;
+    const captureBlunder = legal.find(m => m.to.r === wrongMove.to.r && m.to.c === destC);
+    if (captureBlunder) return captureBlunder;
+
+    let best = legal[0];
+    let bestScore = -1;
+    for (const m of legal) {
+      const sim = this.engine.clone();
+      const rec = sim.makeMove(m);
+      let s = (rec.captured ? (PIECE_VALUES[rec.captured] || 100) : 0) + (rec.inCheck ? 150 : 0);
+      if (sim.status === 'checkmate') s += 9999;
+      if (s > bestScore) { bestScore = s; best = m; }
+    }
+    return best;
+  }
+
+  _handleWrongMoveWithRefutation(wrongMove) {
+    const token = ++this._runToken;
+    const restoreEngine = this.engine.clone();
+    const destC = wrongMove.castle ? wrongMove.kingToCol : wrongMove.to.c;
+
+    this.hintSquares.clear();
+    this.wrongSqKey = `${wrongMove.to.r},${destC}`;
+    this.app.haptics?.pulse('light');
+    this._setFeedback('err', '✕ Jugada incorrecta. Observa cómo responde el rival para neutralizarla...');
+
+    this._playAnimatedMove(wrongMove, async () => {
+      if (token !== this._runToken) return;
+
+      // Si el rival tiene respuesta legal, mostrar su escapatoria o captura en vivo
+      const refutation = this.engine.status === 'playing'
+        ? await this._findRefutationMove(wrongMove)
+        : null;
+
+      if (token !== this._runToken) return;
+
+      const revert = () => {
+        if (token !== this._runToken) return;
+        this.engine = restoreEngine;
+        this.wrongSqKey = null;
+        this.defeatedKingSq = null;
+        this.busy = false;
+        this._setFeedback('err', '✕ Esa línea falla. Vuelve a calcular tu jugada o pulsa "💡 Pista".');
+        this._renderBoard();
+      };
+
+      if (refutation) {
+        this.busy = true;
+        setTimeout(() => {
+          if (token !== this._runToken) return;
+          const preview = this.engine.clone().makeMove(refutation);
+          this._setFeedback('err', `✕ Incorrecto: el rival responde con ${preview.san} y escapa o castiga tu jugada.`);
+          this._playAnimatedMove(refutation, () => {
+            if (token !== this._runToken) return;
+            this.busy = true;
+            setTimeout(revert, 1150);
+          });
+        }, 320);
+      } else {
+        this.busy = true;
+        setTimeout(revert, 950);
+      }
+    });
+  }
+
   _checkMove(move) {
-    const expected = uciToCoords(this.puzzle.solution[this.stepIdx]);
-    const ok = move.from.r === expected.from.r && move.from.c === expected.from.c &&
-               move.to.r === expected.to.r && move.to.c === expected.to.c;
+    const expected = findLegalMoveByUci(this.engine, this.puzzle.solution[this.stepIdx]);
+    const simCheck = this.engine.clone();
+    simCheck.makeMove(move);
+    const deliversMate = simCheck.status === 'checkmate';
+
+    const ok = deliversMate || (expected &&
+      move.from.r === expected.from.r && move.from.c === expected.from.c &&
+      move.to.r === expected.to.r && move.to.c === expected.to.c &&
+      (move.castle || null) === (expected.castle || null));
+
     this.selected = null;
     this.legal = [];
 
     if (!ok) {
-      this._setFeedback('err', 'Esa no es la línea ganadora. Vuelve a calcular o pulsa "Pista".');
-      this._renderBoard();
+      this._handleWrongMoveWithRefutation(move);
       return;
     }
 
+    this.wrongSqKey = null;
     this.hintSquares.clear();
+    const token = ++this._runToken;
+
     this._playAnimatedMove(move, () => {
+      if (token !== this._runToken) return;
       this.stepIdx++;
-      if (this.stepIdx >= this.puzzle.solution.length) {
+      if (deliversMate || this.stepIdx >= this.puzzle.solution.length) {
         this.done = true;
         this._markSolved(this.puzzle.id);
-        this._setFeedback('ok', `✓ ¡Resuelto! ${this.puzzle.explanation}`);
+        this._setFeedback('ok', `✓ ¡Resuelto! ${this.puzzle.explanation || 'Combinación ejecutada con precisión.'}`);
         this._renderBoard();
         return;
       }
       setTimeout(() => {
-        const reply = uciToCoords(this.puzzle.solution[this.stepIdx]);
-        const legal = this.engine.getLegalMoves(this.engine.turn);
-        const replyMove = legal.find(m => m.from.r === reply.from.r && m.from.c === reply.from.c && m.to.r === reply.to.r && m.to.c === reply.to.c);
+        if (token !== this._runToken) return;
+        const replyMove = findLegalMoveByUci(this.engine, this.puzzle.solution[this.stepIdx]);
         if (replyMove) {
           this._playAnimatedMove(replyMove, () => {
+            if (token !== this._runToken) return;
             this.stepIdx++;
-            this._setFeedback('info', '¡Excelente! Continúa la combinación.');
+            this._setFeedback('info', '¡Excelente! Continúa la secuencia ganadora.');
           });
         }
-      }, 280);
+      }, 300);
     });
   }
 
   _playAnimatedMove(move, onDone) {
     const moverColor = this.engine.turn;
     const enemyColor = moverColor === 'w' ? 'b' : 'w';
+    const flipped = this.playerColor === 'b';
     const rec = this.engine.makeMove(move);
+
     this.busy = true;
     this.hidden.clear();
-    this.hidden.add(`${rec.to.r},${rec.to.c}`);
-    this._renderBoard();
-
     const finish = () => {
       this.hidden.clear();
       if (this.engine.status === 'checkmate') {
@@ -350,6 +500,7 @@ export class PuzzleTrainer {
           this.fx.playCheckmateSequence({
             kingHtml: this.app.pieceRenderer('K', enemyColor),
             kingSq: kSq,
+            flipped,
             winnerColor: moverColor,
             onComplete: () => {
               this.hidden.clear();
@@ -368,24 +519,47 @@ export class PuzzleTrainer {
       onDone?.();
     };
 
-    if (rec.captured) {
+    if (rec.castle) {
+      const row = rec.from.r;
+      this.hidden.add(`${row},${rec.kingToCol}`);
+      this.hidden.add(`${row},${rec.rookToCol}`);
+      this._renderBoard();
+      this.app.sound.playCastle();
+      this.fx.animateCastle({
+        kingHtml: this.app.pieceRenderer('K', moverColor),
+        rookHtml: this.app.pieceRenderer('R', moverColor),
+        row,
+        kingFrom: rec.from.c,
+        kingTo: rec.kingToCol,
+        rookFrom: rec.rookFromCol,
+        rookTo: rec.rookToCol,
+        flipped,
+        onComplete: finish
+      });
+    } else if (rec.captured) {
+      this.hidden.add(`${rec.to.r},${rec.to.c}`);
+      this._renderBoard();
       this.fx.playCombatSequence({
         pieceType: rec.piece,
         attackerHtml: this.app.pieceRenderer(rec.promo || rec.piece, moverColor),
         victimHtml: this.app.pieceRenderer(rec.captured, enemyColor),
         from: rec.from,
         to: rec.to,
+        flipped,
         onCharge: () => this.app.sound.playCharge(rec.piece),
         onImpact: () => this.app.sound.playAttack(rec.piece),
         onComplete: finish
       });
     } else {
+      this.hidden.add(`${rec.to.r},${rec.to.c}`);
+      this._renderBoard();
       this.app.sound.playMove(rec.piece);
       this.fx.animateRegularMove({
         pieceHtml: this.app.pieceRenderer(rec.promo || rec.piece, moverColor),
         pieceType: rec.piece,
         from: rec.from,
         to: rec.to,
+        flipped,
         onComplete: finish
       });
     }
@@ -394,26 +568,50 @@ export class PuzzleTrainer {
   _renderBoard() {
     if (!this.gridEl) return;
     this.gridEl.innerHTML = '';
+    const flipped = this.playerColor === 'b';
     const last = this.engine.history[this.engine.history.length - 1] || null;
 
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
+    for (let vr = 0; vr < 8; vr++) {
+      for (let vc = 0; vc < 8; vc++) {
+        const r = flipped ? 7 - vr : vr;
+        const c = flipped ? 7 - vc : vc;
+        const key = `${r},${c}`;
+
         const sq = document.createElement('div');
         sq.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
-        if (last && last.from.r === r && last.from.c === c) sq.classList.add('last-from');
-        if (last && last.to.r === r && last.to.c === c) sq.classList.add('last-to');
+        if (last) {
+          const toCol = last.castle ? last.kingToCol : last.to.c;
+          if (last.from.r === r && last.from.c === c) sq.classList.add('last-from');
+          if (last.to.r === r && toCol === c) sq.classList.add('last-to');
+        }
         if (this.selected && this.selected.r === r && this.selected.c === c) sq.classList.add('selected');
-        if (this.hintSquares.has(`${r},${c}`)) sq.classList.add('hint-sq');
+        if (this.hintSquares.has(key)) sq.classList.add('hint-sq');
+        if (key === this.wrongSqKey) sq.classList.add('pz-wrong-sq');
 
-        const m = this.legal.find(x => x.to.r === r && x.to.c === c);
+        const m = this.legal.find(x =>
+          (x.to.r === r && x.to.c === c) || (x.castle && x.from.r === r && x.kingToCol === c)
+        );
         if (m) {
           const mk = document.createElement('div');
           mk.className = m.captured ? 'capture-ring' : 'move-dot';
           sq.appendChild(mk);
         }
 
+        if (vc === 0) {
+          const rk = document.createElement('span');
+          rk.className = 'coord-rank';
+          rk.textContent = 8 - r;
+          sq.appendChild(rk);
+        }
+        if (vr === 7) {
+          const fl = document.createElement('span');
+          fl.className = 'coord-file';
+          fl.textContent = FILES[c];
+          sq.appendChild(fl);
+        }
+
         const piece = this.engine.board[r][c];
-        if (piece && !this.hidden.has(`${r},${c}`)) {
+        if (piece && !this.hidden.has(key)) {
           const wrap = document.createElement('div');
           wrap.className = 'piece-wrap';
           if (piece.type === 'K' && this.defeatedKingSq && this.defeatedKingSq.r === r && this.defeatedKingSq.c === c) {
@@ -421,6 +619,13 @@ export class PuzzleTrainer {
           }
           wrap.innerHTML = this.app.pieceRenderer(piece.type, piece.color);
           sq.appendChild(wrap);
+        }
+
+        if (key === this.wrongSqKey) {
+          const badge = document.createElement('span');
+          badge.className = 'pz-wrong-x';
+          badge.textContent = '✕';
+          sq.appendChild(badge);
         }
 
         sq.addEventListener('click', () => this._onSquareClick(r, c));
