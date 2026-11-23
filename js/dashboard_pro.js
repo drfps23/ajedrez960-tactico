@@ -242,6 +242,60 @@ function ensureProStyles() {
       background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.35);
       display: flex; flex-direction: column; gap: 7px; font-size: 0.78rem;
     }
+
+    /* Menú lateral fijo en computadora, plegable en celular */
+    .dt-sidebar { display: none; }
+    @media (min-width: 1080px) {
+      body.has-dt-sidebar { padding-left: 230px; }
+      body.has-dt-sidebar .dt-topbar-menu-btn { display: none !important; }
+      body.has-dt-sidebar .dt-sidebar {
+        display: flex; flex-direction: column;
+        position: fixed; top: 0; left: 0; bottom: 0; width: 230px; z-index: 45;
+        background: linear-gradient(180deg, rgba(13, 19, 34, 0.98), rgba(8, 12, 22, 0.99));
+        border-right: 1px solid var(--border-color);
+        padding: 14px 10px; gap: 10px;
+      }
+      .dt-sb-brand {
+        display: flex; align-items: center; gap: 10px; padding: 6px 8px 12px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14); cursor: pointer;
+      }
+      .dt-sb-logo {
+        width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+        background: linear-gradient(135deg, #0284c7, #6366f1); color: #fff; font-size: 1.15rem; flex-shrink: 0;
+      }
+      .dt-sb-brand strong { display: block; font-size: 0.92rem; color: #f8fafc; line-height: 1.15; }
+      .dt-sb-brand span { font-size: 0.7rem; color: var(--text-muted); }
+      .dt-sb-nav {
+        flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px;
+      }
+      .dt-sb-item {
+        width: 100%; background: transparent; border: 1px solid transparent; border-radius: 10px;
+        color: var(--text-main); padding: 9px 11px; font-size: 0.84rem; font-weight: 700;
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        cursor: pointer; text-align: left; transition: background 0.15s, border-color 0.15s;
+      }
+      .dt-sb-item:hover { background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.28); }
+      .dt-sb-item.active {
+        background: rgba(56, 189, 248, 0.18); border-color: var(--accent-cyan); color: var(--accent-cyan);
+      }
+      .dt-sb-profile {
+        display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 11px;
+        background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border-color);
+        color: var(--text-main); cursor: pointer; text-align: left;
+      }
+      .dt-sb-profile:hover { border-color: var(--accent-cyan); }
+      .dt-sb-av { font-size: 1.35rem; }
+      .dt-sb-pinfo { min-width: 0; }
+      .dt-sb-pinfo strong {
+        display: block; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .dt-sb-pinfo span { font-size: 0.7rem; color: var(--accent-cyan); font-weight: 700; }
+    }
+    @media (min-width: 1080px) and (max-width: 1479px) {
+      body.has-dt-sidebar.review-coach-open { padding-left: 0; }
+      body.has-dt-sidebar.review-coach-open .dt-sidebar { display: none; }
+      body.has-dt-sidebar.review-coach-open .dt-topbar-menu-btn { display: inline-flex !important; }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -250,6 +304,8 @@ export function attachDashboardPro(app) {
   ensureProStyles();
 
   let dailyPuzzle = getLocalDailyPuzzle();
+  let triggerSidebarSync = () => {};
+
   fetchLiveDailyPuzzle()
     .then((live) => {
       dailyPuzzle = live;
@@ -277,6 +333,7 @@ export function attachDashboardPro(app) {
   const setFlag = (f) => {
     try { localStorage.setItem(FLAG_KEY, f); } catch { /* ignorar */ }
     app.matchmaking?.syncCloudPlayer?.();
+    triggerSidebarSync();
   };
 
   const loadActiveDays = () => {
@@ -308,6 +365,7 @@ export function attachDashboardPro(app) {
         pace[bucket] = Math.max(400, pace[bucket] + delta);
         savePace(pace);
       }
+      triggerSidebarSync();
       return res;
     };
   }
@@ -546,5 +604,97 @@ export function attachDashboardPro(app) {
         }, 90);
       });
     };
+  }
+
+  // 4. Menú lateral fijo en PC (desplegable en celular)
+  if (!document.getElementById('dt-sidebar')) {
+    const aside = document.createElement('aside');
+    aside.id = 'dt-sidebar';
+    aside.className = 'dt-sidebar';
+    document.body.appendChild(aside);
+    document.body.classList.add('has-dt-sidebar');
+
+    const markTopMenuBtn = () => {
+      document.querySelectorAll('header button, .topbar button, .app-header button').forEach(b => {
+        if ((b.textContent || '').includes('Menú')) b.classList.add('dt-topbar-menu-btn');
+      });
+    };
+
+    let rafId = null;
+    const syncSidebar = () => {
+      rafId = null;
+      markTopMenuBtn();
+      const drawer = app.shell?.drawerPanel;
+      if (!drawer) return;
+      if (!drawer.querySelector('.drawer-item') && typeof app.shell._renderDrawer === 'function') {
+        app.shell._renderDrawer();
+      }
+      const items = Array.from(drawer.querySelectorAll('.drawer-item'));
+      if (!items.length) return;
+
+      const prof = app.store?.data?.profile || {};
+      const elo = app.store?.data?.stats?.classic?.elo || 1200;
+      const curView = app.shell?.currentView || 'home';
+      const flag = getFlag();
+
+      aside.innerHTML = `
+        <div class="dt-sb-brand" id="dt-sb-home">
+          <div class="dt-sb-logo">♛</div>
+          <div>
+            <strong>Ajedrez Táctico</strong>
+            <span>Clásico & Fischer 960</span>
+          </div>
+        </div>
+        <nav class="dt-sb-nav">
+          ${items.map((btn, idx) => {
+            const nav = btn.dataset.nav || '';
+            const active = btn.classList.contains('active') || (nav && nav === curView);
+            return `<button type="button" class="dt-sb-item ${active ? 'active' : ''}" data-dt-idx="${idx}" data-dt-nav="${esc(nav)}">${btn.innerHTML}</button>`;
+          }).join('')}
+        </nav>
+        <button type="button" class="dt-sb-profile" id="dt-sb-prof">
+          <span class="dt-sb-av">${esc(prof.avatar || '♛')}</span>
+          <div class="dt-sb-pinfo">
+            <strong>${esc(prof.name || 'Jugador')} ${esc(flag)}</strong>
+            <span>ELO Clásico: ${elo}</span>
+          </div>
+        </button>
+      `;
+
+      aside.querySelector('#dt-sb-home')?.addEventListener('click', () => app.shell.navigate('home'));
+      aside.querySelector('#dt-sb-prof')?.addEventListener('click', () => app.shell.navigate('profile'));
+      aside.querySelectorAll('[data-dt-idx]').forEach(sbBtn => {
+        sbBtn.addEventListener('click', () => {
+          const idx = Number(sbBtn.dataset.dtIdx);
+          const nav = sbBtn.dataset.dtNav;
+          const liveBtns = app.shell?.drawerPanel?.querySelectorAll('.drawer-item');
+          const orig = liveBtns?.[idx];
+          if (orig) orig.click();
+          else if (nav) app.shell.navigate(nav);
+        });
+      });
+    };
+
+    triggerSidebarSync = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(syncSidebar);
+    };
+
+    if (app.shell?.drawerPanel && typeof MutationObserver !== 'undefined') {
+      const obs = new MutationObserver(triggerSidebarSync);
+      obs.observe(app.shell.drawerPanel, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    if (app.shell?.navigate) {
+      const origNav = app.shell.navigate.bind(app.shell);
+      app.shell.navigate = (viewId) => {
+        const res = origNav(viewId);
+        triggerSidebarSync();
+        return res;
+      };
+    }
+
+    setTimeout(triggerSidebarSync, 120);
+    setTimeout(triggerSidebarSync, 750);
   }
 }
