@@ -2,10 +2,8 @@ const VAULT_KEY = 'ajedrez960_saved_games_v1';
 
 function esc(str) {
   return String(str ?? '')
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"');
+    .replace(/&/g, '&').replace(/</g, '<')
+    .replace(/>/g, '>').replace(/"/g, '"');
 }
 
 function ensureVaultStyles() {
@@ -13,25 +11,32 @@ function ensureVaultStyles() {
   const style = document.createElement('style');
   style.dataset.vaultCss = 'true';
   style.textContent = `
-    .vault-list { display: flex; flex-direction: column; gap: 10px; }
-    .vault-card {
+    .vault-list { display: flex; flex-direction: column; gap: 8px; }
+    .vault-row {
       background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 13px; padding: 14px 16px;
-      display: flex; flex-wrap: wrap; justify-content: space-between;
+      border-radius: 13px; padding: 12px 15px;
+      display: grid; grid-template-columns: 78px 1fr 90px 105px auto;
       align-items: center; gap: 12px;
     }
-    .vault-card.win { border-left: 4px solid #22c55e; }
-    .vault-card.loss { border-left: 4px solid #f43f5e; }
-    .vault-card.draw { border-left: 4px solid #38bdf8; }
-    .vault-meta { display: flex; flex-direction: column; gap: 4px; }
-    .vault-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-    .vault-pill {
-      font-size: 0.69rem; font-weight: 800; padding: 2px 8px;
-      border-radius: 999px; background: rgba(56, 189, 248, 0.14); color: var(--accent-cyan);
+    .vault-row.win { border-left: 4px solid #22c55e; }
+    .vault-row.loss { border-left: 4px solid #f43f5e; }
+    .vault-row.draw { border-left: 4px solid #38bdf8; }
+    .vault-clock-col { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.74rem; color: var(--text-muted); }
+    .vault-score-col { display: flex; align-items: center; gap: 8px; font-family: ui-monospace, monospace; font-weight: 800; font-size: 0.86rem; }
+    .vault-badge {
+      width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+      font-size: 0.85rem; font-weight: 900; color: #090d16;
     }
-    .vault-pill.win { background: rgba(34, 197, 94, 0.16); color: #4ade80; }
-    .vault-pill.loss { background: rgba(244, 63, 94, 0.16); color: #fb7185; }
-    .vault-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .vault-badge.win { background: #22c55e; }
+    .vault-badge.loss { background: #f43f5e; color: #fff; }
+    .vault-badge.draw { background: #94a3b8; }
+    .vault-acc-col { text-align: center; font-size: 0.78rem; color: var(--text-muted); }
+    .vault-acc-col strong { display: block; color: #f8fafc; font-size: 0.84rem; }
+    .vault-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    @media (max-width: 780px) {
+      .vault-row { grid-template-columns: 1fr auto; }
+      .vault-clock-col, .vault-acc-col { display: none; }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -39,23 +44,20 @@ function ensureVaultStyles() {
 export function attachHistoryVault(app) {
   ensureVaultStyles();
 
+  let activeVaultId = null;
+  let lastSavedKey = '';
+
   const loadGames = () => {
     try {
       const arr = JSON.parse(localStorage.getItem(VAULT_KEY) || '[]');
       return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   };
 
   const saveGames = (list) => {
     const limit = app.store.hasAccess('pro_history') ? 50 : 10;
-    try {
-      localStorage.setItem(VAULT_KEY, JSON.stringify(list.slice(0, limit)));
-    } catch { /* ignorar */ }
+    try { localStorage.setItem(VAULT_KEY, JSON.stringify(list.slice(0, limit))); } catch { /* ignorar */ }
   };
-
-  let lastSavedKey = '';
 
   const archiveCurrentGame = () => {
     const hist = app.engine?.history || [];
@@ -69,41 +71,45 @@ export function attachHistoryVault(app) {
     let outcome = 'draw';
     if (app.engine.winner) outcome = app.engine.winner === myColor ? 'win' : 'loss';
 
-    const oppText = app.mode === 'online'
-      ? 'Rival Online'
+    const oppRaw = app.mode === 'online'
+      ? (app.dom.topName?.textContent || 'Rival Online')
       : app.mode === 'pvp'
         ? '2 Jugadores Local'
-        : (app.dom.topName?.textContent || 'IA').replace(/^Negras\s*\(|\)$/g, '');
+        : (app.dom.topName?.textContent || 'IA');
+    const opponent = oppRaw.replace(/^(Blancas|Negras)\s*\(|\)$/g, '').trim() || 'Rival';
 
     const now = new Date();
-    const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) +
-      ' · ' + now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-
-    const compactMoves = hist.map(m => ({
-      fr: m.from.r, fc: m.from.c, tr: m.to.r, tc: m.to.c,
-      pr: m.promo || null, ca: m.castle || null
-    }));
+    const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    const clockId = app.clock?.preset?.id || 'off';
+    const clockShort = clockId === 'off' ? 'Sin reloj' : clockId === '10+0' ? '10 min' : clockId === '30+0' ? '30 min' : clockId;
 
     const entry = {
       id: `gm_${Date.now()}`,
       date: dateStr,
       variant: app.variant,
       positionId: app.engine.positionId,
-      opponent: oppText,
+      clockId,
+      clockShort,
+      opponent,
       myColor,
       outcome,
       status: app.engine.status,
       winner: app.engine.winner,
       plies: hist.length,
-      moves: compactMoves
+      whiteAcc: null,
+      blackAcc: null,
+      moves: hist.map(m => ({
+        fr: m.from.r, fc: m.from.c, tr: m.to.r, tc: m.to.c,
+        pr: m.promo || null, ca: m.castle || null
+      }))
     };
 
     const list = loadGames();
     list.unshift(entry);
     saveGames(list);
+    activeVaultId = entry.id;
   };
 
-  // Guardar automáticamente al concluir cualquier partida
   ['_handleGameOver', '_finishResign', '_handleTimeout'].forEach((fn) => {
     const orig = app[fn].bind(app);
     app[fn] = (...args) => {
@@ -113,7 +119,29 @@ export function attachHistoryVault(app) {
     };
   });
 
+  // Guardar Precisión % automáticamente cuando Stockfish termine un análisis
+  const savePrecisionToVault = () => {
+    const sum = app.analyzer?.summary;
+    if (!sum || sum.whiteAcc == null) return;
+    const list = loadGames();
+    if (!list.length) return;
+    const target = list.find(g => g.id === activeVaultId) || list[0];
+    if (!target) return;
+    target.whiteAcc = sum.whiteAcc;
+    target.blackAcc = sum.blackAcc;
+    saveGames(list);
+  };
+
+  if (app.analyzer) {
+    const origReady = app.analyzer.onAnalysisReady;
+    app.analyzer.onAnalysisReady = (results) => {
+      savePrecisionToVault();
+      if (origReady) origReady(results);
+    };
+  }
+
   const openSavedForAnalysis = (entry) => {
+    activeVaultId = entry.id;
     app.shell.navigate('play');
     app._setModeProgrammatically('pvp');
     app.setVariant(entry.variant, { startFresh: false });
@@ -140,18 +168,19 @@ export function attachHistoryVault(app) {
     app.analyzer.startAnalysis(app.engine);
   };
 
+  app.historyVault = { loadGames, openSavedForAnalysis };
+
   const renderVaultView = () => {
     const root = app.shell.viewRoot;
     const list = loadGames();
     const limit = app.store.hasAccess('pro_history') ? 50 : 10;
-    const outcomeText = { win: 'Victoria', loss: 'Derrota', draw: 'Tablas' };
-    const reasonText = { checkmate: 'Jaque Mate', timeout: 'Tiempo', resigned: 'Rendición', stalemate: 'Ahogado' };
+    const myName = app.store.data.profile.name || 'Tú';
 
     root.innerHTML = `
       <div class="sec-head">
         <div>
-          <h2>📜 Mis Partidas Guardadas (${list.length}/${limit})</h2>
-          <p class="sec-sub">Reabre cualquier partida para revivirla y analizarla jugada por jugada con Stockfish.</p>
+          <h2>📜 Historial de Partidas (${list.length}/${limit})</h2>
+          <p class="sec-sub">Precisión de Stockfish, ritmo de reloj y revisión completa en un toque.</p>
         </div>
         <button class="btn btn-secondary" id="vault-home">← Inicio</button>
       </div>
@@ -160,27 +189,44 @@ export function attachHistoryVault(app) {
         <div class="settings-box" style="text-align:center;padding:28px">
           <div style="font-size:2rem;margin-bottom:6px">♟️</div>
           <strong>Aún no tienes partidas archivadas</strong>
-          <p class="sec-sub">Al terminar tu próxima partida (Clásico, Fischer 960 u Online) se guardará aquí automáticamente.</p>
+          <p class="sec-sub">Al terminar tu próxima partida aparecerá aquí con su precisión y botón de resumen.</p>
         </div>
       ` : `
         <div class="vault-list">
-          ${list.map(g => `
-            <div class="vault-card ${g.outcome}">
-              <div class="vault-meta">
-                <div class="vault-tags">
-                  <span class="vault-pill ${g.outcome}">${outcomeText[g.outcome] || 'Final'}</span>
-                  <span class="vault-pill">${g.variant === 'classic' ? '♟ Clásico' : `🎲 960 #${g.positionId}`}</span>
-                  <span class="sec-sub">${esc(g.date)}</span>
+          ${list.map(g => {
+            const wScore = g.winner === 'w' ? '1' : g.winner === 'b' ? '0' : '½';
+            const bScore = g.winner === 'b' ? '1' : g.winner === 'w' ? '0' : '½';
+            const badgeSym = g.outcome === 'win' ? '+' : g.outcome === 'loss' ? '−' : '=';
+            const whiteName = g.myColor === 'w' ? myName : g.opponent;
+            const blackName = g.myColor === 'b' ? myName : g.opponent;
+            const accHtml = (g.whiteAcc != null && g.blackAcc != null)
+              ? `<strong>${g.whiteAcc}% / ${g.blackAcc}%</strong><span>Precisión</span>`
+              : `<strong>—</strong><span>Sin analizar</span>`;
+            return `
+              <div class="vault-row ${g.outcome}">
+                <div class="vault-clock-col">
+                  <span style="font-size:1.1rem">⏱</span>
+                  <strong>${esc(g.clockShort || 'Sin reloj')}</strong>
                 </div>
-                <strong>vs. ${esc(g.opponent)}</strong>
-                <span class="sec-sub">${Math.ceil(g.plies / 2)} jugadas · ${reasonText[g.status] || 'Finalizada'}</span>
+                <div style="min-width:0">
+                  <div style="font-size:0.84rem;font-weight:700">⬜ ${esc(whiteName)}</div>
+                  <div style="font-size:0.84rem;color:var(--text-muted)">⬛ ${esc(blackName)}</div>
+                  <div class="sec-sub" style="margin-top:2px">
+                    ${g.variant === 'classic' ? '♟ Clásico' : `🎲 960 #${g.positionId}`} · ${Math.ceil(g.plies / 2)} jug. · ${esc(g.date)}
+                  </div>
+                </div>
+                <div class="vault-score-col">
+                  <div><div>${wScore}</div><div>${bScore}</div></div>
+                  <span class="vault-badge ${g.outcome}">${badgeSym}</span>
+                </div>
+                <div class="vault-acc-col">${accHtml}</div>
+                <div class="vault-actions">
+                  <button class="btn btn-primary" data-analyze-id="${g.id}">📊 Resumen</button>
+                  <button class="btn btn-ghost" data-del-id="${g.id}" title="Eliminar">🗑️</button>
+                </div>
               </div>
-              <div class="vault-actions">
-                <button class="btn btn-primary" data-analyze-id="${g.id}">📊 Analizar</button>
-                <button class="btn btn-ghost" data-del-id="${g.id}" title="Eliminar partida">🗑️</button>
-              </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       `}
     `;
@@ -194,14 +240,12 @@ export function attachHistoryVault(app) {
     });
     root.querySelectorAll('[data-del-id]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const next = loadGames().filter(x => x.id !== btn.dataset.delId);
-        saveGames(next);
+        saveGames(loadGames().filter(x => x.id !== btn.dataset.delId));
         renderVaultView();
       });
     });
   };
 
-  // Registrar vista 'history' en AppShell
   const origRenderView = app.shell.renderCurrentView.bind(app.shell);
   app.shell.renderCurrentView = () => {
     if (app.shell.currentView === 'history') { renderVaultView(); return; }
