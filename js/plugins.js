@@ -3,6 +3,7 @@ import { AcademyTrainer } from './academy.js';
 import { attachEloSystem } from './elo.js';
 import { attachOpeningBook } from './openings.js';
 import { attachTouchControls } from './touch.js';
+import { attachStockfishLevels } from './ai_levels.js';
 
 function attachPlugins() {
   const app = window.chessApp;
@@ -29,6 +30,9 @@ function attachPlugins() {
   attachEloSystem(app);
   attachOpeningBook(app);
   attachTouchControls(app);
+
+  // Fase 9: Niveles ELO reales y Veredicto Profundo con Stockfish
+  attachStockfishLevels(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
