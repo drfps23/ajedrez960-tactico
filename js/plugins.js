@@ -4,6 +4,7 @@ import { attachEloSystem } from './elo.js';
 import { attachOpeningBook } from './openings.js';
 import { attachTouchControls } from './touch.js';
 import { attachStockfishLevels } from './ai_levels.js';
+import { attachMobileAndStoreReady } from './mobile.js';
 
 function attachPlugins() {
   const app = window.chessApp;
@@ -33,6 +34,9 @@ function attachPlugins() {
 
   // Fase 9: Niveles ELO reales y Veredicto Profundo con Stockfish
   attachStockfishLevels(app);
+
+  // Fase 10: Háptica móvil, PWA Offline, marca segura y puente Capacitor/RevenueCat
+  attachMobileAndStoreReady(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
