@@ -248,6 +248,10 @@ function ensureProStyles() {
     @media (min-width: 1080px) {
       body.has-dt-sidebar { padding-left: 230px; }
       body.has-dt-sidebar .dt-topbar-menu-btn { display: none !important; }
+      body.has-dt-sidebar .dt-topbar-brand {
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
       body.has-dt-sidebar .dt-sidebar {
         display: flex; flex-direction: column;
         position: fixed; top: 0; left: 0; bottom: 0; width: 230px; z-index: 45;
@@ -295,6 +299,10 @@ function ensureProStyles() {
       body.has-dt-sidebar.review-coach-open { padding-left: 0; }
       body.has-dt-sidebar.review-coach-open .dt-sidebar { display: none; }
       body.has-dt-sidebar.review-coach-open .dt-topbar-menu-btn { display: inline-flex !important; }
+      body.has-dt-sidebar.review-coach-open .dt-topbar-brand {
+        visibility: visible !important;
+        pointer-events: auto !important;
+      }
     }
   `;
   document.head.appendChild(style);
@@ -606,7 +614,7 @@ export function attachDashboardPro(app) {
     };
   }
 
-  // 4. Menú lateral fijo en PC (desplegable en celular)
+  // 4. Menú lateral fijo en PC (desplegable en celular) + oculta logo duplicado
   if (!document.getElementById('dt-sidebar')) {
     const aside = document.createElement('aside');
     aside.id = 'dt-sidebar';
@@ -614,16 +622,23 @@ export function attachDashboardPro(app) {
     document.body.appendChild(aside);
     document.body.classList.add('has-dt-sidebar');
 
-    const markTopMenuBtn = () => {
+    const markTopBarEls = () => {
       document.querySelectorAll('header button, .topbar button, .app-header button').forEach(b => {
         if ((b.textContent || '').includes('Menú')) b.classList.add('dt-topbar-menu-btn');
       });
+      const header = document.querySelector('header, .topbar, .app-header');
+      if (header && header.children.length >= 2) {
+        const first = header.firstElementChild;
+        if (first && (first.textContent || '').includes('Ajedrez Táctico') && !first.querySelector('select')) {
+          first.classList.add('dt-topbar-brand');
+        }
+      }
     };
 
     let rafId = null;
     const syncSidebar = () => {
       rafId = null;
-      markTopMenuBtn();
+      markTopBarEls();
       const drawer = app.shell?.drawerPanel;
       if (!drawer) return;
       if (!drawer.querySelector('.drawer-item') && typeof app.shell._renderDrawer === 'function') {
