@@ -1,5 +1,8 @@
 import { PuzzleTrainer } from './puzzles.js';
 import { AcademyTrainer } from './academy.js';
+import { attachEloSystem } from './elo.js';
+import { attachOpeningBook } from './openings.js';
+import { attachTouchControls } from './touch.js';
 
 function attachPlugins() {
   const app = window.chessApp;
@@ -8,10 +11,10 @@ function attachPlugins() {
     return;
   }
 
+  // Fase 7: Problemas y Academia
   app.puzzles = new PuzzleTrainer(app);
   app.academy = new AcademyTrainer(app);
 
-  // Detener voz o animaciones de entrenamiento al cambiar de sección
   const originalNavigate = app.shell.navigate.bind(app.shell);
   app.shell.navigate = (viewId) => {
     if (viewId !== 'puzzles') app.puzzles.stop();
@@ -22,7 +25,11 @@ function attachPlugins() {
   app.shell.onRenderPuzzles = (mountEl) => app.puzzles.mount(mountEl);
   app.shell.onRenderLearn = (mountEl) => app.academy.mount(mountEl);
 
-  // Actualizar las etiquetas de la Pantalla de Inicio a "ACTIVO"
+  // Fase 8: ELO Online oficial, Detector de Aperturas y Drag & Drop Táctil
+  attachEloSystem(app);
+  attachOpeningBook(app);
+  attachTouchControls(app);
+
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
   }
