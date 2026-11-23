@@ -1,8 +1,9 @@
-import { Chess960Engine, PIECE_VALUES } from './engine.js';
+import { Chess960Engine } from './engine.js';
 import { CLASS_META } from './analyzer.js';
 import { detectOpening } from './openings.js';
 
-// Añadir categoría "Libro" al catálogo global compartido con el tablero e historial
+const PIECE_VAL = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
+
 CLASS_META.book = {
   code: '📖',
   label: 'Libro',
@@ -42,6 +43,82 @@ function calcAccuracyFromDrops(drops) {
   return Math.max(5, Math.min(100, Math.round(sum / drops.length)));
 }
 
+function buildSmartStockfishComment({
+  analyzer,
+  classification,
+  beforeEngine,
+  afterPlayed,
+  played,
+  bestMove,
+  bestSan,
+  bestRecord,
+  openingHit,
+  wasInCheck,
+  isForced,
+  isMatePlayed,
+  savedUnderPressure,
+  missedMate,
+  allowedMate,
+  isExactBest,
+  looksLikeSacrifice
+}) {
+  if (isMatePlayed) {
+    return '¡Jaque Mate! Remate impecable sin escapatoria para el Rey rival.';
+  }
+  if (isForced) {
+    return wasInCheck
+      ? 'Esta era la única jugada legal posible para salir del jaque.'
+      : 'Única jugada legal disponible en esta posición.';
+  }
+  if (classification === 'book' && openingHit) {
+    return `Jugada teórica de ${openingHit.name}. Sigue líneas probadas de apertura.`;
+  }
+  if (classification === 'brilliant') {
+    return '¡Jugada brillante! Sacrificio táctico exacto que supera a todas las alternativas según Stockfish.';
+  }
+  if (classification === 'best') {
+    if (wasInCheck) {
+      return '¡Defensa exacta bajo jaque! Estabas en un aprieto y encontraste la mejor jugada posible para sobrevivir.';
+    }
+    if (savedUnderPressure) {
+      return '¡Gran recurso en un aprieto! Esta era la mejor jugada posible para salvar tu pieza y sostener la posición.';
+    }
+    if (played.captured) {
+      return '¡Esta era la mejor jugada posible! Captura precisa que aprovecha al máximo la posición.';
+    }
+    if (played.inCheck) {
+      return '¡La mejor jugada posible! Das jaque ganando iniciativa y restringiendo al Rey rival.';
+    }
+    return '¡Esta era la mejor jugada posible! Coincides exactamente con la primera línea de Stockfish.';
+  }
+  if (classification === 'excellent') {
+    return `Excelente decisión, prácticamente tan fuerte como la mejor jugada de Stockfish (${bestSan}).`;
+  }
+  if (classification === 'good') {
+    return isExactBest
+      ? 'Jugada sólida que mantiene controlada la posición.'
+      : `Jugada sólida y razonable. Stockfish prefería ligeramente ${bestSan}.`;
+  }
+
+  if (typeof analyzer._buildCoachComment === 'function') {
+    return analyzer._buildCoachComment({
+      classification,
+      beforeEngine,
+      afterPlayed,
+      played,
+      bestMove,
+      bestSan,
+      bestRecord,
+      missedMate,
+      allowedMate,
+      isExactBest,
+      looksLikeSacrifice
+    });
+  }
+
+  return `Stockfish recomendaba ${bestSan} en esta posición.`;
+}
+
 export function attachStockfishAnalyzer(app) {
   const analyzer = app.analyzer;
   const sf = app.stockfish;
@@ -78,7 +155,6 @@ export function attachStockfishAnalyzer(app) {
     analyzer.frames = frames;
     analyzer.results = [];
 
-    // Evaluar cada posición con Stockfish a profundidad estable
     const evals = new Array(total + 1).fill(null);
     analyzer._renderProgress(0, total + 1);
 
@@ -87,11 +163,7 @@ export function attachStockfishAnalyzer(app) {
       const eng = frames[k].engine;
 
       if (eng.status === 'checkmate') {
-        evals[k] = {
-          move: null,
-          scoreCp: eng.winner === 'w' ? 100000 : -100000,
-          mateIn: 0
-        };
+        evals[k] = { move: null, scoreCp: eng.winner === 'w' ? 100000 : -100000, mateIn: 0 };
       } else if (eng.status !== 'playing') {
         evals[k] = { move: null, scoreCp: 0, mateIn: null };
       } else {
@@ -150,20 +222,32 @@ export function attachStockfishAnalyzer(app) {
       const missedMateToEqual = moverBefore > 90000 && moverAfter < 320;
       const missedMateStillWinning = moverBefore > 90000 && moverAfter >= 320 && moverAfter < 90000;
 
-      // 1. Detectar jugada teórica de Libro (solo Clásico, primeras 5 jugadas completas)
-      const openingHit = (engine.positionId === 518 && i < 10)
+      const openingHit = (engine.positionId === 518 && i < 10 && typeof detectOpening === 'function')
         ? detectOpening(history.slice(0, i + 1))
         : null;
       const isBookMove = Boolean(openingHit && !allowedMate && winDrop <= 4.5 && !isMatePlayed);
 
-      // 2. Detectar si la posición ya estaba totalmente decidida o era jugada forzada
       const alreadyWon = moverBefore >= 650 && moverAfter >= 550;
       const alreadyLost = moverBefore <= -650 && moverAfter <= -550;
       const isForced = legalMoves.length <= 1;
+      const wasInCheck = typeof beforeEngine.isInCheck === 'function'
+        ? beforeEngine.isInCheck(color)
+        : false;
 
-      // 3. Criterio estricto de Brillante: sacrificio táctico genuino + jugada #1 exacta
+      const hasAttackCheck = typeof beforeEngine.isSquareAttacked === 'function';
+      const pieceWasAttacked = !played.castle && hasAttackCheck &&
+        beforeEngine.isSquareAttacked(played.from.r, played.from.c, enemy) &&
+        played.piece !== 'P';
       const destC = played.castle ? played.kingToCol : played.to.c;
-      const destAttacked = !played.castle && afterEngine.isSquareAttacked(played.to.r, destC, enemy);
+      const destAttacked = !played.castle &&
+        typeof afterEngine.isSquareAttacked === 'function' &&
+        afterEngine.isSquareAttacked(played.to.r, destC, enemy);
+      const savedUnderPressure = Boolean(
+        isExactBest &&
+        !isForced &&
+        ((pieceWasAttacked && !destAttacked) || (moverBefore < -40 && moverAfter >= -95))
+      );
+
       const looksLikeSacrifice =
         !isMatePlayed &&
         !isBookMove &&
@@ -173,7 +257,7 @@ export function attachStockfishAnalyzer(app) {
         destAttacked &&
         played.piece !== 'P' &&
         played.piece !== 'K' &&
-        (!played.captured || (PIECE_VALUES[played.piece] || 0) >= (PIECE_VALUES[played.captured] || 0) + 150) &&
+        (!played.captured || (PIECE_VAL[played.piece] || 0) >= (PIECE_VAL[played.captured] || 0) + 150) &&
         Math.abs(evalBest) < 360 &&
         moverAfter >= 40 &&
         legalMoves.length >= 4;
@@ -201,21 +285,25 @@ export function attachStockfishAnalyzer(app) {
         classification = 'good';
       }
 
-      const comment = classification === 'book'
-        ? `Jugada teórica de ${openingHit.name}. Sigue líneas probadas de apertura.`
-        : analyzer._buildCoachComment({
-            classification,
-            beforeEngine,
-            afterPlayed: afterEngine,
-            played,
-            bestMove,
-            bestSan,
-            bestRecord,
-            missedMate: missedMateToEqual || missedMateStillWinning,
-            allowedMate,
-            isExactBest,
-            looksLikeSacrifice
-          });
+      const comment = buildSmartStockfishComment({
+        analyzer,
+        classification,
+        beforeEngine,
+        afterPlayed: afterEngine,
+        played,
+        bestMove,
+        bestSan,
+        bestRecord,
+        openingHit,
+        wasInCheck,
+        isForced,
+        isMatePlayed,
+        savedUnderPressure,
+        missedMate: missedMateToEqual || missedMateStillWinning,
+        allowedMate,
+        isExactBest,
+        looksLikeSacrifice
+      });
 
       analyzer.results.push({
         played,
@@ -251,11 +339,10 @@ export function attachStockfishAnalyzer(app) {
     analyzer.goToPly(1);
   };
 
-  // Mostrar resumen completo calibrado y retirar el botón manual amarillo
   const origRenderPanel = analyzer._renderReviewPanel.bind(analyzer);
   analyzer._renderReviewPanel = () => {
     origRenderPanel();
-    const box = app.dom.postgameSlot?.querySelector('.an-box');
+    const box = app.dom?.postgameSlot?.querySelector('.an-box');
     if (!box || !analyzer.usedStockfish) return;
 
     const manualBtn = box.querySelector('#sf-deep-btn');
