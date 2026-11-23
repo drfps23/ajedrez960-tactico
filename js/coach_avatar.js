@@ -1,7 +1,7 @@
 const GENDER_PREF_KEY = 'ajedrez960_coach_avatar_v1';
 
-const MALE_VOICE_RE = /alvaro|álvaro|jorge|pablo|raúl|raul|diego|carlos|alonso|tomás|tomas|enrique|sergio|emilio|gonzalo|gerardo|darío|dario|luciano|juan|mateo|nicolás|nicolas|andrés|andres|rodrigo|esteban|héctor|hector|luis|miguel|david|pedro|antonio|javier|ramón|ramon|male|hombre/i;
-const FEMALE_VOICE_RE = /dalia|elena|sabina|paulina|salomé|salome|mónica|monica|camila|mía|mia|paloma|laura|lucía|lucia|sofía|sofia|helena|carmen|catalina|francisca|conchita|elisa|isabela|valentina|jimena|ximena|renata|tania|marisol|maría|maria|ana|lupe|angélica|angelica|elvira|irene|vera|triana|abril|female|mujer|google español/i;
+const MALE_VOICE_RE = /alvaro|álvaro|jorge|pablo|raúl|raul|diego|carlos|alonso|tomás|tomas|enrique|sergio|emilio|gonzalo|gerardo|darío|dario|luciano|juan|mateo|nicolás|nicolas|andrés|andres|rodrigo|esteban|héctor|hector|luis|miguel|david|pedro|antonio|javier|ramón|ramon|eddy|reed|rocko|grandpa|male|hombre/i;
+const FEMALE_VOICE_RE = /dalia|elena|sabina|paulina|salomé|salome|mónica|monica|camila|mía|mia|paloma|laura|lucía|lucia|sofía|sofia|helena|carmen|catalina|francisca|conchita|elisa|isabela|valentina|jimena|ximena|renata|tania|marisol|maría|maria|ana|lupe|angélica|angelica|elvira|irene|vera|triana|abril|flo|sandy|shelley|grandma|female|mujer|google español/i;
 
 const MOOD_META = {
   brilliant:  { color: '#22d3ee', tag: '✨ ¡Brillante!' },
@@ -37,9 +37,7 @@ function ensureAvatarStyles() {
       display: grid; place-items: center; overflow: hidden;
       animation: coachBreathe 3.2s ease-in-out infinite;
     }
-    .coach-stage.speaking .coach-portrait {
-      animation: coachTalkBob 0.55s ease-in-out infinite;
-    }
+    .coach-stage.speaking .coach-portrait { animation: coachTalkBob 0.55s ease-in-out infinite; }
     .coach-portrait svg { width: 58px; height: 58px; }
     .coach-eyes { transform-origin: 32px 27px; animation: coachBlink 4.6s infinite; }
     .coach-mouth-talk { opacity: 0; transform-origin: 32px 37px; }
@@ -60,7 +58,6 @@ function ensureAvatarStyles() {
     .coach-eq span {
       width: 3px; height: 3px; border-radius: 2px;
       background: var(--coach-aura, #38bdf8); opacity: 0.45;
-      transition: height 0.15s ease;
     }
     .coach-stage.speaking .coach-eq span { opacity: 1; animation: coachEq 0.48s ease-in-out infinite alternate; }
     .coach-stage.speaking .coach-eq span:nth-child(2) { animation-delay: 0.1s; }
@@ -74,36 +71,20 @@ function ensureAvatarStyles() {
       padding: 5px 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;
     }
     .coach-swap-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
-
-    @keyframes coachBreathe {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-1.5px); }
-    }
-    @keyframes coachTalkBob {
-      0%, 100% { transform: translateY(0) scale(1); }
-      50% { transform: translateY(-2px) scale(1.03); }
-    }
-    @keyframes coachBlink {
-      0%, 92%, 100% { transform: scaleY(1); }
-      96% { transform: scaleY(0.12); }
-    }
-    @keyframes coachMouth {
-      0% { transform: scaleY(0.45) scaleX(0.92); }
-      100% { transform: scaleY(1.18) scaleX(1.06); }
-    }
-    @keyframes coachEq {
-      0% { height: 3px; }
-      100% { height: 14px; }
-    }
+    @keyframes coachBreathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+    @keyframes coachTalkBob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.03); } }
+    @keyframes coachBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.12); } }
+    @keyframes coachMouth { 0% { transform: scaleY(0.45) scaleX(0.92); } 100% { transform: scaleY(1.18) scaleX(1.06); } }
+    @keyframes coachEq { 0% { height: 3px; } 100% { height: 14px; } }
   `;
   document.head.appendChild(style);
 }
 
 function detectVoiceGender(voiceObj) {
   const name = voiceObj?.name || '';
-  if (MALE_VOICE_RE.test(name)) return 'male';
+  if (MALE_VOICE_RE.test(name) && !FEMALE_VOICE_RE.test(name)) return 'male';
   if (FEMALE_VOICE_RE.test(name)) return 'female';
-  return 'female';
+  return 'neutral';
 }
 
 function renderCoachSvg(gender, mood) {
@@ -114,7 +95,6 @@ function renderCoachSvg(gender, mood) {
   const suit = isF ? '#312e81' : '#0f172a';
   const accent = (MOOD_META[mood] || MOOD_META.teach).color;
 
-  // Cejas según emoción
   let brows = `<path d="M22 23.5q3-1.6 6 0M36 23.5q3-1.6 6 0" stroke="#1e1b24" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
   if (mood === 'mistake' || mood === 'blunder') {
     brows = `<path d="M22 24.5l6-2M42 24.5l-6-2" stroke="#1e1b24" stroke-width="2" fill="none" stroke-linecap="round"/>`;
@@ -124,7 +104,6 @@ function renderCoachSvg(gender, mood) {
     brows = `<path d="M22 22.5q3-2.2 6-.4M36 22.1q3-1.8 6 .4" stroke="#1e1b24" stroke-width="1.9" fill="none" stroke-linecap="round"/>`;
   }
 
-  // Boca en reposo según emoción
   let idleMouth = `<path d="M27.5 36.5q4.5 3 9 0" stroke="#7c2d12" stroke-width="1.9" fill="none" stroke-linecap="round"/>`;
   if (mood === 'blunder') {
     idleMouth = `<ellipse cx="32" cy="37" rx="3.4" ry="2.6" fill="#7f1d1d"/>`;
@@ -180,17 +159,16 @@ export function attachCoachAvatar(app) {
   const voice = app.analyzer?.voice;
   if (!voice) return;
 
-  let manualGender = null;
+  let activeGender = 'female';
   try {
     const saved = localStorage.getItem(GENDER_PREF_KEY);
-    if (saved === 'male' || saved === 'female') manualGender = saved;
+    if (saved === 'male' || saved === 'female') activeGender = saved;
+    else if (detectVoiceGender(voice.voice) === 'male') activeGender = 'male';
   } catch { /* ignorar */ }
 
   let isSpeaking = false;
   let pollTimer = null;
-  let graceUntil = 0;
-
-  const getActiveGender = () => manualGender || detectVoiceGender(voice.voice);
+  let speakDelayTimer = null;
 
   const syncSpeakingUI = (speaking) => {
     isSpeaking = speaking;
@@ -202,36 +180,44 @@ export function attachCoachAvatar(app) {
   };
 
   const stopPolling = () => {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (speakDelayTimer) { clearTimeout(speakDelayTimer); speakDelayTimer = null; }
+  };
+
+  /**
+   * Garantiza diferenciación real de voz masculina vs. femenina:
+   * 1) Usa voz nativa del género elegido si el sistema la tiene.
+   * 2) Si el dispositivo solo tiene voces de un género, aplica modulación de tono y ritmo inconfundible.
+   */
+  const resolveVoiceProfile = (targetGender) => {
+    if (!voice.spanishVoices || voice.spanishVoices.length === 0) voice._refreshVoices();
+    const list = voice.spanishVoices || [];
+    const current = voice.voice || list[0] || null;
+    const currentG = detectVoiceGender(current);
+
+    if (current && currentG === targetGender) {
+      return {
+        voiceObj: current,
+        pitch: targetGender === 'male' ? 0.94 : 1.06,
+        rate: targetGender === 'male' ? 0.99 : 1.04
+      };
     }
-  };
 
-  const startSpeakingWatch = (text) => {
-    stopPolling();
-    const now = performance.now();
-    graceUntil = now + 700;
-    const maxEnd = now + Math.max(2500, Math.min(22000, (text || '').length * 95));
-    syncSpeakingUI(true);
+    const nativeMatch = list.find(v => detectVoiceGender(v) === targetGender);
+    if (nativeMatch) {
+      return {
+        voiceObj: nativeMatch,
+        pitch: targetGender === 'male' ? 0.94 : 1.06,
+        rate: targetGender === 'male' ? 0.99 : 1.04
+      };
+    }
 
-    pollTimer = setInterval(() => {
-      const t = performance.now();
-      const synthSpeaking = Boolean(window.speechSynthesis?.speaking);
-      if (t > maxEnd || (t > graceUntil && !synthSpeaking)) {
-        stopPolling();
-        syncSpeakingUI(false);
-      }
-    }, 140);
-  };
-
-  // Envolver speak/stop para sincronizar boca y ondas con exactitud
-  const origSpeak = voice.speak.bind(voice);
-  voice.speak = (text, force = false) => {
-    const willSpeak = voice.supported && (voice.enabled || force) && Boolean(text);
-    const res = origSpeak(text, force);
-    if (willSpeak) startSpeakingWatch(text);
-    return res;
+    // Respaldo acústico cuando el dispositivo solo dispone de una voz en español
+    return {
+      voiceObj: current,
+      pitch: targetGender === 'male' ? 0.64 : 1.28,
+      rate: targetGender === 'male' ? 0.94 : 1.06
+    };
   };
 
   const origStop = voice.stop.bind(voice);
@@ -241,40 +227,78 @@ export function attachCoachAvatar(app) {
     return origStop();
   };
 
+  voice.speak = (text, force = false) => {
+    if (!voice.supported || (!voice.enabled && !force) || !text) return;
+    voice.stop();
+
+    const prof = resolveVoiceProfile(activeGender);
+    const maxMs = Math.max(2400, Math.min(22000, text.length * 95));
+
+    speakDelayTimer = setTimeout(() => {
+      speakDelayTimer = null;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = prof.voiceObj?.lang || 'es-ES';
+      if (prof.voiceObj) utter.voice = prof.voiceObj;
+      utter.pitch = prof.pitch;
+      utter.rate = prof.rate;
+
+      const startAt = performance.now();
+      syncSpeakingUI(true);
+
+      utter.onend = () => { stopPolling(); syncSpeakingUI(false); };
+      utter.onerror = () => { stopPolling(); syncSpeakingUI(false); };
+
+      pollTimer = setInterval(() => {
+        const elapsed = performance.now() - startAt;
+        if (elapsed > maxMs || (elapsed > 750 && !window.speechSynthesis?.speaking)) {
+          stopPolling();
+          syncSpeakingUI(false);
+        }
+      }, 150);
+
+      try { window.speechSynthesis.speak(utter); } catch { syncSpeakingUI(false); }
+    }, 50);
+  };
+
   const origSelectVoice = voice.selectVoiceByName.bind(voice);
   voice.selectVoiceByName = (name) => {
     origSelectVoice(name);
-    manualGender = null;
-    try { localStorage.removeItem(GENDER_PREF_KEY); } catch { /* ignorar */ }
-    refreshAllStages();
-  };
-
-  const swapAvatarAndVoice = () => {
-    const next = getActiveGender() === 'female' ? 'male' : 'female';
-    manualGender = next;
-    try { localStorage.setItem(GENDER_PREF_KEY, next); } catch { /* ignorar */ }
-
-    // Si el dispositivo tiene una voz en español de ese género, cambiarla también
-    const matching = (voice.spanishVoices || []).find(v => detectVoiceGender(v) === next);
-    if (matching) {
-      origSelectVoice(matching.name);
-      const sel = document.getElementById('an-voice-select');
-      if (sel) sel.value = matching.name;
+    const detected = detectVoiceGender(voice.voice);
+    if (detected === 'male' || detected === 'female') {
+      activeGender = detected;
+      try { localStorage.setItem(GENDER_PREF_KEY, activeGender); } catch { /* ignorar */ }
     }
     refreshAllStages();
   };
 
+  const swapAvatarAndVoice = () => {
+    activeGender = activeGender === 'female' ? 'male' : 'female';
+    try { localStorage.setItem(GENDER_PREF_KEY, activeGender); } catch { /* ignorar */ }
+
+    const prof = resolveVoiceProfile(activeGender);
+    if (prof.voiceObj) {
+      origSelectVoice(prof.voiceObj.name);
+      const sel = document.getElementById('an-voice-select');
+      if (sel) sel.value = prof.voiceObj.name;
+    }
+
+    refreshAllStages();
+    const greeting = activeGender === 'male'
+      ? 'Maestro Aurelio listo para analizar tus jugadas.'
+      : 'Maestra Valeria lista para analizar tus jugadas.';
+    voice.speak(greeting, true);
+  };
+
   const buildStageEl = (mood) => {
-    const gender = getActiveGender();
     const meta = MOOD_META[mood] || MOOD_META.teach;
-    const coachName = gender === 'female' ? 'Maestra Valeria' : 'Maestro Aurelio';
+    const coachName = activeGender === 'female' ? 'Maestra Valeria' : 'Maestro Aurelio';
 
     const el = document.createElement('div');
     el.className = `coach-stage${isSpeaking ? ' speaking' : ''}`;
     el.dataset.mood = mood;
     el.style.setProperty('--coach-aura', meta.color);
     el.innerHTML = `
-      <div class="coach-portrait">${renderCoachSvg(gender, mood)}</div>
+      <div class="coach-portrait">${renderCoachSvg(activeGender, mood)}</div>
       <div class="coach-meta">
         <div class="coach-name-row">
           <span class="coach-name">${coachName}</span>
@@ -298,7 +322,6 @@ export function attachCoachAvatar(app) {
     });
   };
 
-  // 1. Montar avatar en el Analizador Post-Partida
   const origReview = app.analyzer._renderReviewPanel.bind(app.analyzer);
   app.analyzer._renderReviewPanel = () => {
     origReview();
@@ -308,14 +331,10 @@ export function attachCoachAvatar(app) {
 
     const ply = app.analyzer.currentPly;
     const item = ply > 0 ? app.analyzer.results[ply - 1] : null;
-    let mood = 'teach';
-    if (item) {
-      mood = item.played?.san?.endsWith('#') ? 'mate' : item.classification;
-    }
+    const mood = item ? (item.played?.san?.endsWith('#') ? 'mate' : item.classification) : 'teach';
     box.insertBefore(buildStageEl(mood), coachCard);
   };
 
-  // 2. Montar avatar en la Academia de Aperturas
   if (app.academy) {
     const origAcademy = app.academy._renderScaffold.bind(app.academy);
     app.academy._renderScaffold = () => {
