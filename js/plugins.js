@@ -10,6 +10,7 @@ import { runCinematicIntro } from './intro.js';
 import { attachAuthSystem } from './auth.js';
 import { attachCoachAvatar } from './coach_avatar.js';
 import { attachArmory } from './armory.js';
+import { attachSocialFeatures } from './social.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -51,11 +52,14 @@ function attachPlugins() {
   const auth = attachAuthSystem(app);
   introPromise.then(() => auth.ensureSession({ skipIfInvite: true }));
 
-  // Fase 12: Avatar Animado del Entrenador sincronizado con la voz
+  // Fase 12: Avatar Animado del Entrenador con voces masculina/femenina diferenciadas
   attachCoachAvatar(app);
 
-  // Fase 13: Armería FX (Estelas, Packs de Combate y 4 Remates de Jaque Mate)
+  // Fase 13: Armería FX personalizable por cada pieza
   attachArmory(app);
+
+  // Fase 14: Reacciones Rápidas Online + Tarjeta de Victoria compartible
+  attachSocialFeatures(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
