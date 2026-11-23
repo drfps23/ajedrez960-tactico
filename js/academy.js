@@ -70,11 +70,12 @@ export class AcademyTrainer {
 
   mount(container) {
     this.container = container;
-    this.selectLesson(this.lesson.id, false);
+    const pending = ACADEMY_LESSONS.find(l => l.level === this.level && !this.completed.has(l.id));
+    this.selectLesson((pending || this.lesson).id, false);
   }
 
-  _lessonsInLevel() {
-    return ACADEMY_LESSONS.filter(l => l.level === this.level);
+  _lessonsInLevel(lvl = this.level) {
+    return ACADEMY_LESSONS.filter(l => l.level === lvl);
   }
 
   _currentStep() {
@@ -88,6 +89,38 @@ export class AcademyTrainer {
 
   _flipped() {
     return this.lesson.playerColor === 'b';
+  }
+
+  goToNextLesson() {
+    const isPro = this.app.store.hasAccess('pro_academy');
+    const inLvl = this._lessonsInLevel();
+    const curIdx = inLvl.findIndex(l => l.id === this.lesson.id);
+
+    // 1. Siguiente lección dentro del mismo nivel
+    const pendingInLvl = inLvl.find((l, i) => i > curIdx && !this.completed.has(l.id)) || inLvl[curIdx + 1];
+    if (pendingInLvl) {
+      this.selectLesson(pendingInLvl.id, true);
+      return;
+    }
+
+    // 2. Avanzar al siguiente nivel disponible
+    for (let nextLvl = this.level + 1; nextLvl <= 4; nextLvl++) {
+      const lvlObj = ACADEMY_LEVELS.find(x => x.id === nextLvl);
+      if (lvlObj?.proOnly && !isPro) {
+        this.stop();
+        this.app.shell.navigate('subscription');
+        return;
+      }
+      const nextList = this._lessonsInLevel(nextLvl);
+      if (nextList.length) {
+        const pick = nextList.find(l => !this.completed.has(l.id)) || nextList[0];
+        this.selectLesson(pick.id, true);
+        return;
+      }
+    }
+
+    // 3. Si completó todas, reiniciar desde Nivel 1
+    this.selectLesson(ACADEMY_LESSONS[0].id, true);
   }
 
   selectLesson(id, speakIntro = true) {
@@ -116,11 +149,35 @@ export class AcademyTrainer {
     }
   }
 
+  _refreshProgressBadges() {
+    if (!this.container) return;
+    const h2 = this.container.querySelector('.sec-head h2');
+    if (h2) h2.textContent = `🎓 Academia Interactiva (${this.completed.size}/${ACADEMY_LESSONS.length})`;
+
+    this.container.querySelectorAll('[data-lvl]').forEach(btn => {
+      const lvlId = Number(btn.dataset.lvl);
+      const lvlObj = ACADEMY_LEVELS.find(x => x.id === lvlId);
+      const all = this._lessonsInLevel(lvlId);
+      const done = all.filter(x => this.completed.has(x.id)).length;
+      const span = btn.querySelector('span');
+      if (span && lvlObj) span.textContent = `ELO ${lvlObj.elo} · ${done}/${all.length} completadas`;
+    });
+
+    this.container.querySelectorAll('[data-lid]').forEach(pill => {
+      const l = ACADEMY_LESSONS.find(x => x.id === pill.dataset.lid);
+      if (!l) return;
+      const done = this.completed.has(l.id);
+      pill.classList.toggle('solved', done);
+      pill.textContent = `${done ? '✓ ' : ''}${l.title}`;
+    });
+  }
+
   _renderScaffold() {
     if (!this.container) return;
     const list = this._lessonsInLevel();
     const isPro = this.app.store.hasAccess('pro_academy');
     const waiting = this._isWaitingForUser();
+    const isFinished = this.stepIdx >= this.lesson.steps.length;
 
     this.container.innerHTML = `
       <div class="sec-head" style="margin-bottom:12px">
@@ -133,7 +190,7 @@ export class AcademyTrainer {
 
       <div class="tr-levels">
         ${ACADEMY_LEVELS.map(l => {
-          const allInLvl = ACADEMY_LESSONS.filter(x => x.level === l.id);
+          const allInLvl = this._lessonsInLevel(l.id);
           const doneInLvl = allInLvl.filter(x => this.completed.has(x.id)).length;
           const locked = l.proOnly && !isPro;
           return `
@@ -169,7 +226,7 @@ export class AcademyTrainer {
           <div class="tr-feedback ${this.taskState.type}" id="ac-task">${this.taskState.text}</div>
           <div class="tr-actions">
             <button class="btn btn-secondary" id="ac-prev">◀ Anterior</button>
-            <button class="btn btn-primary" id="ac-next">${waiting ? '⏭ Ver jugada' : 'Siguiente ▶'}</button>
+            <button class="btn btn-primary" id="ac-next">${isFinished ? 'Siguiente Lección →' : (waiting ? '⏭ Ver jugada' : 'Siguiente ▶')}</button>
             <button class="btn btn-secondary" id="ac-hint" style="${waiting ? '' : 'display:none'}">💡 Pista</button>
             <button class="btn btn-secondary" id="ac-auto">▶ Auto</button>
             <button class="btn btn-secondary ${this.voiceOn ? 'active' : ''}" id="ac-voice">${this.voiceOn ? '🔊 Voz' : '🔇 Voz'}</button>
@@ -196,15 +253,27 @@ export class AcademyTrainer {
     });
     this.container.querySelectorAll('[data-lvl]').forEach(b => b.addEventListener('click', () => {
       if (b.dataset.locked === 'true') { this.stop(); this.app.shell.navigate('subscription'); return; }
-      this.level = Number(b.dataset.lvl);
-      const first = this._lessonsInLevel()[0];
-      if (first) this.selectLesson(first.id, true);
+      const targetLvl = Number(b.dataset.lvl);
+      const inLvl = this._lessonsInLevel(targetLvl);
+      if (!inLvl.length) return;
+
+      // Abrir la primera lección pendiente del nivel (o alternar a la otra si ya estás en este nivel)
+      let pick = inLvl.find(l => !this.completed.has(l.id) && l.id !== this.lesson.id)
+        || inLvl.find(l => !this.completed.has(l.id));
+      if (!pick) {
+        const curIdx = inLvl.findIndex(l => l.id === this.lesson.id);
+        pick = inLvl[(curIdx + 1) % inLvl.length];
+      }
+      this.selectLesson(pick.id, true);
     }));
     this.container.querySelectorAll('[data-lid]').forEach(b => b.addEventListener('click', () => {
       this.selectLesson(b.dataset.lid, true);
     }));
     this.container.querySelector('#ac-prev').addEventListener('click', () => this.stepBack());
-    this.nextBtn.addEventListener('click', () => this.stepForward(false));
+    this.nextBtn.addEventListener('click', () => {
+      if (this.stepIdx >= this.lesson.steps.length) this.goToNextLesson();
+      else this.stepForward(false);
+    });
     this.hintBtn.addEventListener('click', () => this._showHint());
     this.container.querySelector('#ac-auto').addEventListener('click', () => this.toggleAuto());
     this.container.querySelector('#ac-voice').addEventListener('click', (e) => {
@@ -218,7 +287,7 @@ export class AcademyTrainer {
       const posId = this.lesson.positionId ?? 518;
       const variant = posId === 518 ? 'classic' : 'fischer960';
       this.app.shell.navigate('play');
-      this.app._setModeProgrammatically('ai-normal');
+      this.app._setModeProgrammatically('ai-elo-1200');
       this.app.setVariant(variant, { startFresh: false });
       this.app.startNewGame(posId);
     });
@@ -335,7 +404,8 @@ export class AcademyTrainer {
       const nextStep = this._currentStep();
       if (!nextStep) {
         this._markDone(this.lesson.id);
-        this._setTask('ok', '🏆 ¡Lección completada! Prueba el botón de abajo para practicarla contra la IA o pasa a la siguiente.');
+        this._refreshProgressBadges();
+        this._setTask('ok', '🏆 ¡Lección completada! Pulsa "Siguiente Lección →" para continuar o practícala contra la IA.');
       } else if (nextStep.interactive) {
         this._setTask('task', `🎯 ${nextStep.prompt}`);
       } else {
@@ -351,7 +421,6 @@ export class AcademyTrainer {
         this.app.analyzer?.voice?.speak(spoken, true);
       }
 
-      // Si el siguiente paso es respuesta automática del rival tras un acierto del jugador, avanzarlo solo
       if (nextStep && !nextStep.interactive && step.interactive && !continueAuto) {
         this.autoTimer = setTimeout(() => this.stepForward(false), 1600);
       } else if (continueAuto && nextStep) {
@@ -414,8 +483,13 @@ export class AcademyTrainer {
         ? this.lesson.summary
         : this.lesson.steps[this.stepIdx - 1].text;
     }
+    const isFinished = this.stepIdx >= this.lesson.steps.length;
     const waiting = this._isWaitingForUser();
-    if (this.nextBtn) this.nextBtn.textContent = waiting ? '⏭ Ver jugada' : 'Siguiente ▶';
+    if (this.nextBtn) {
+      this.nextBtn.textContent = isFinished
+        ? 'Siguiente Lección →'
+        : (waiting ? '⏭ Ver jugada' : 'Siguiente ▶');
+    }
     if (this.hintBtn) this.hintBtn.style.display = waiting ? '' : 'none';
   }
 
