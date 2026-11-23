@@ -4,10 +4,12 @@ import { attachEloSystem } from './elo.js';
 import { attachOpeningBook } from './openings.js';
 import { attachTouchControls } from './touch.js';
 import { attachStockfishLevels } from './ai_levels.js';
+import { attachStockfishAnalyzer } from './sf_analyzer.js';
 import { attachMobileAndStoreReady } from './mobile.js';
 import { runCinematicIntro } from './intro.js';
 import { attachAuthSystem } from './auth.js';
 import { attachCoachAvatar } from './coach_avatar.js';
+import { attachArmory } from './armory.js';
 
 // Lanza la pantalla de entrada de inmediato al abrir la app
 const introPromise = runCinematicIntro();
@@ -38,8 +40,9 @@ function attachPlugins() {
   attachOpeningBook(app);
   attachTouchControls(app);
 
-  // Fase 9: Niveles ELO reales y Veredicto Profundo con Stockfish
+  // Fase 9 + Mejora: Stockfish en IA y Análisis Post-Partida 100% automático
   attachStockfishLevels(app);
+  attachStockfishAnalyzer(app);
 
   // Fase 10: Háptica móvil, PWA Offline y puente Capacitor/RevenueCat
   attachMobileAndStoreReady(app);
@@ -50,6 +53,9 @@ function attachPlugins() {
 
   // Fase 12: Avatar Animado del Entrenador sincronizado con la voz
   attachCoachAvatar(app);
+
+  // Fase 13: Armería FX (Estelas, Packs de Combate y 4 Remates de Jaque Mate)
+  attachArmory(app);
 
   if (app.shell.currentView !== 'play') {
     app.shell.renderCurrentView();
