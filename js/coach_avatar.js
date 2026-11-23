@@ -1,13 +1,16 @@
+import { CLASS_META } from './analyzer.js';
+
 const GENDER_PREF_KEY = 'ajedrez960_coach_avatar_v1';
 
 const MALE_VOICE_RE = /alvaro|álvaro|jorge|pablo|raúl|raul|diego|carlos|alonso|tomás|tomas|enrique|sergio|emilio|gonzalo|gerardo|darío|dario|luciano|juan|mateo|nicolás|nicolas|andrés|andres|rodrigo|esteban|héctor|hector|luis|miguel|david|pedro|antonio|javier|ramón|ramon|eddy|reed|rocko|grandpa|male|hombre/i;
 const FEMALE_VOICE_RE = /dalia|elena|sabina|paulina|salomé|salome|mónica|monica|camila|mía|mia|paloma|laura|lucía|lucia|sofía|sofia|helena|carmen|catalina|francisca|conchita|elisa|isabela|valentina|jimena|ximena|renata|tania|marisol|maría|maria|ana|lupe|angélica|angelica|elvira|irene|vera|triana|abril|flo|sandy|shelley|grandma|female|mujer|google español/i;
 
 const MOOD_META = {
+  book:       { color: '#c084fc', tag: '📖 Teoría' },
   brilliant:  { color: '#22d3ee', tag: '✨ ¡Brillante!' },
-  best:       { color: '#22c55e', tag: '★ Precisión' },
+  best:       { color: '#22c55e', tag: '★ Mejor jugada' },
   excellent:  { color: '#4ade80', tag: '👍 Excelente' },
-  good:       { color: '#38bdf8', tag: '♟ Sólida' },
+  good:       { color: '#38bdf8', tag: '♟ Buena' },
   inaccuracy: { color: '#facc15', tag: '🤔 Imprecisión' },
   mistake:    { color: '#fb923c', tag: '⚠ Error' },
   blunder:    { color: '#f43f5e', tag: '❗ Error grave' },
@@ -20,62 +23,149 @@ function ensureAvatarStyles() {
   const style = document.createElement('style');
   style.dataset.coachAvatarCss = 'true';
   style.textContent = `
-    .coach-stage {
-      display: flex; align-items: center; gap: 12px;
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(9, 13, 22, 0.92));
-      border: 1px solid var(--border-color); border-radius: 12px;
-      padding: 8px 11px; position: relative; overflow: hidden;
+    /* Layout de 3 columnas en Revisión: Entrenador (Izq) · Tablero (Centro) · Controles (Der) */
+    body.review-coach-open main.arena {
+      display: grid !important;
+      grid-template-columns: 270px minmax(360px, 560px) minmax(280px, 350px) !important;
+      max-width: 1320px !important;
+      justify-content: center;
+      align-items: start;
+      gap: 18px;
     }
-    .coach-stage.speaking {
+    body.review-coach-open .an-coach { display: none !important; }
+    body.review-coach-open .side-panel .card:has(#fx-preview-grid) { display: none !important; }
+
+    /* Layout de 3 columnas en Academia */
+    .tr-layout.tr-with-coach {
+      grid-template-columns: 255px minmax(320px, 500px) minmax(240px, 1fr) !important;
+      align-items: start;
+    }
+    .tr-layout.tr-with-coach #ac-text { display: none !important; }
+
+    /* Cabina lateral del Entrenador */
+    .coach-dock-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(180deg, rgba(19, 27, 46, 0.94) 0%, rgba(9, 13, 22, 0.96) 100%);
+      border: 1.5px solid var(--border-color);
+      border-radius: 16px;
+      padding: 18px 14px;
+      position: sticky;
+      top: 14px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .coach-dock-panel.speaking {
       border-color: var(--coach-aura, #38bdf8);
-      box-shadow: 0 0 18px color-mix(in srgb, var(--coach-aura, #38bdf8) 28%, transparent);
+      box-shadow: 0 0 28px color-mix(in srgb, var(--coach-aura, #38bdf8) 32%, transparent);
+    }
+    .coach-dock-top {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
     }
     .coach-portrait {
-      width: 62px; height: 62px; flex-shrink: 0; border-radius: 50%;
-      background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--coach-aura, #38bdf8) 26%, #1e293b), #090d16);
-      border: 2px solid var(--coach-aura, #38bdf8);
-      display: grid; place-items: center; overflow: hidden;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--coach-aura, #38bdf8) 28%, #1e293b), #090d16);
+      border: 3px solid var(--coach-aura, #38bdf8);
+      box-shadow: 0 0 24px color-mix(in srgb, var(--coach-aura, #38bdf8) 28%, transparent);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
       animation: coachBreathe 3.2s ease-in-out infinite;
     }
-    .coach-stage.speaking .coach-portrait { animation: coachTalkBob 0.55s ease-in-out infinite; }
-    .coach-portrait svg { width: 58px; height: 58px; }
+    .coach-dock-panel.speaking .coach-portrait {
+      animation: coachTalkBob 0.52s ease-in-out infinite;
+    }
+    .coach-portrait svg { width: 112px; height: 112px; }
     .coach-eyes { transform-origin: 32px 27px; animation: coachBlink 4.6s infinite; }
     .coach-mouth-talk { opacity: 0; transform-origin: 32px 37px; }
-    .coach-stage.speaking .coach-mouth-idle { opacity: 0; }
-    .coach-stage.speaking .coach-mouth-talk {
-      opacity: 1; animation: coachMouth 0.24s ease-in-out infinite alternate;
+    .coach-dock-panel.speaking .coach-mouth-idle { opacity: 0; }
+    .coach-dock-panel.speaking .coach-mouth-talk {
+      opacity: 1;
+      animation: coachMouth 0.24s ease-in-out infinite alternate;
     }
-    .coach-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-    .coach-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .coach-name { font-size: 0.82rem; font-weight: 800; color: #f8fafc; }
+
+    .coach-identity { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .coach-name { font-size: 0.96rem; font-weight: 800; color: #f8fafc; }
     .coach-mood-pill {
-      font-size: 0.67rem; font-weight: 800; padding: 1px 7px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px;
       color: var(--coach-aura, #38bdf8);
-      background: color-mix(in srgb, var(--coach-aura, #38bdf8) 16%, transparent);
+      background: color-mix(in srgb, var(--coach-aura, #38bdf8) 18%, transparent);
+      border: 1px solid color-mix(in srgb, var(--coach-aura, #38bdf8) 38%, transparent);
     }
-    .coach-wave-row { display: flex; align-items: center; gap: 6px; height: 16px; }
-    .coach-eq { display: flex; align-items: flex-end; gap: 2.5px; height: 14px; }
+    .coach-wave-row { display: flex; align-items: center; justify-content: center; gap: 6px; height: 18px; }
+    .coach-eq { display: flex; align-items: flex-end; gap: 3px; height: 15px; }
     .coach-eq span {
-      width: 3px; height: 3px; border-radius: 2px;
-      background: var(--coach-aura, #38bdf8); opacity: 0.45;
+      width: 3.5px; height: 3px; border-radius: 2px;
+      background: var(--coach-aura, #38bdf8); opacity: 0.4;
     }
-    .coach-stage.speaking .coach-eq span { opacity: 1; animation: coachEq 0.48s ease-in-out infinite alternate; }
-    .coach-stage.speaking .coach-eq span:nth-child(2) { animation-delay: 0.1s; }
-    .coach-stage.speaking .coach-eq span:nth-child(3) { animation-delay: 0.22s; }
-    .coach-stage.speaking .coach-eq span:nth-child(4) { animation-delay: 0.08s; }
-    .coach-stage.speaking .coach-eq span:nth-child(5) { animation-delay: 0.18s; }
-    .coach-state-txt { font-size: 0.71rem; color: var(--text-muted); }
+    .coach-dock-panel.speaking .coach-eq span { opacity: 1; animation: coachEq 0.45s ease-in-out infinite alternate; }
+    .coach-dock-panel.speaking .coach-eq span:nth-child(2) { animation-delay: 0.1s; }
+    .coach-dock-panel.speaking .coach-eq span:nth-child(3) { animation-delay: 0.22s; }
+    .coach-dock-panel.speaking .coach-eq span:nth-child(4) { animation-delay: 0.08s; }
+    .coach-dock-panel.speaking .coach-eq span:nth-child(5) { animation-delay: 0.18s; }
+    .coach-state-txt { font-size: 0.74rem; color: var(--text-muted); }
+
+    .coach-bubble {
+      width: 100%;
+      background: rgba(9, 13, 22, 0.78);
+      border: 1px solid var(--border-color);
+      border-top: 3px solid var(--coach-aura, #38bdf8);
+      border-radius: 12px;
+      padding: 11px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .coach-bubble-head {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.8rem; font-weight: 800; color: #f8fafc;
+    }
+    .coach-bubble-text { font-size: 0.84rem; line-height: 1.5; color: var(--text-main); }
+    .coach-bubble-best { font-size: 0.78rem; font-weight: 700; color: #4ade80; }
+
     .coach-swap-btn {
-      background: rgba(15, 23, 42, 0.8); color: var(--text-muted);
+      background: rgba(15, 23, 42, 0.85); color: var(--text-muted);
       border: 1px solid var(--border-color); border-radius: 8px;
-      padding: 5px 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;
+      padding: 4px 9px; font-size: 0.72rem; font-weight: 700; cursor: pointer;
     }
     .coach-swap-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
-    @keyframes coachBreathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
-    @keyframes coachTalkBob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.03); } }
+
+    /* Tablet / Móvil: tarjeta horizontal compacta arriba del tablero */
+    @media (max-width: 1140px) {
+      body.review-coach-open main.arena {
+        grid-template-columns: 1fr !important;
+        max-width: 640px !important;
+      }
+      .tr-layout.tr-with-coach {
+        grid-template-columns: 1fr !important;
+      }
+      .coach-dock-panel {
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 12px;
+      }
+      .coach-portrait { width: 76px; height: 76px; }
+      .coach-portrait svg { width: 70px; height: 70px; }
+      .coach-identity { align-items: flex-start; text-align: left; flex: 1; }
+      .coach-bubble { flex: 1 1 100%; }
+    }
+
+    @keyframes coachBreathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+    @keyframes coachTalkBob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2.5px) scale(1.03); } }
     @keyframes coachBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.12); } }
-    @keyframes coachMouth { 0% { transform: scaleY(0.45) scaleX(0.92); } 100% { transform: scaleY(1.18) scaleX(1.06); } }
-    @keyframes coachEq { 0% { height: 3px; } 100% { height: 14px; } }
+    @keyframes coachMouth { 0% { transform: scaleY(0.45) scaleX(0.92); } 100% { transform: scaleY(1.2) scaleX(1.06); } }
+    @keyframes coachEq { 0% { height: 3px; } 100% { height: 15px; } }
   `;
   document.head.appendChild(style);
 }
@@ -172,10 +262,10 @@ export function attachCoachAvatar(app) {
 
   const syncSpeakingUI = (speaking) => {
     isSpeaking = speaking;
-    document.querySelectorAll('.coach-stage').forEach((el) => {
+    document.querySelectorAll('.coach-dock-panel').forEach((el) => {
       el.classList.toggle('speaking', speaking);
       const st = el.querySelector('.coach-state-txt');
-      if (st) st.textContent = speaking ? 'Explicando jugada...' : 'Listo para analizar';
+      if (st) st.textContent = speaking ? 'Explicando...' : 'Listo';
     });
   };
 
@@ -184,11 +274,6 @@ export function attachCoachAvatar(app) {
     if (speakDelayTimer) { clearTimeout(speakDelayTimer); speakDelayTimer = null; }
   };
 
-  /**
-   * Garantiza diferenciación real de voz masculina vs. femenina:
-   * 1) Usa voz nativa del género elegido si el sistema la tiene.
-   * 2) Si el dispositivo solo tiene voces de un género, aplica modulación de tono y ritmo inconfundible.
-   */
   const resolveVoiceProfile = (targetGender) => {
     if (!voice.spanishVoices || voice.spanishVoices.length === 0) voice._refreshVoices();
     const list = voice.spanishVoices || [];
@@ -196,28 +281,13 @@ export function attachCoachAvatar(app) {
     const currentG = detectVoiceGender(current);
 
     if (current && currentG === targetGender) {
-      return {
-        voiceObj: current,
-        pitch: targetGender === 'male' ? 0.94 : 1.06,
-        rate: targetGender === 'male' ? 0.99 : 1.04
-      };
+      return { voiceObj: current, pitch: targetGender === 'male' ? 0.94 : 1.06, rate: targetGender === 'male' ? 0.99 : 1.04 };
     }
-
     const nativeMatch = list.find(v => detectVoiceGender(v) === targetGender);
     if (nativeMatch) {
-      return {
-        voiceObj: nativeMatch,
-        pitch: targetGender === 'male' ? 0.94 : 1.06,
-        rate: targetGender === 'male' ? 0.99 : 1.04
-      };
+      return { voiceObj: nativeMatch, pitch: targetGender === 'male' ? 0.94 : 1.06, rate: targetGender === 'male' ? 0.99 : 1.04 };
     }
-
-    // Respaldo acústico cuando el dispositivo solo dispone de una voz en español
-    return {
-      voiceObj: current,
-      pitch: targetGender === 'male' ? 0.64 : 1.28,
-      rate: targetGender === 'male' ? 0.94 : 1.06
-    };
+    return { voiceObj: current, pitch: targetGender === 'male' ? 0.64 : 1.28, rate: targetGender === 'male' ? 0.94 : 1.06 };
   };
 
   const origStop = voice.stop.bind(voice);
@@ -268,7 +338,7 @@ export function attachCoachAvatar(app) {
       activeGender = detected;
       try { localStorage.setItem(GENDER_PREF_KEY, activeGender); } catch { /* ignorar */ }
     }
-    refreshAllStages();
+    refreshAllDocks();
   };
 
   const swapAvatarAndVoice = () => {
@@ -282,68 +352,152 @@ export function attachCoachAvatar(app) {
       if (sel) sel.value = prof.voiceObj.name;
     }
 
-    refreshAllStages();
+    refreshAllDocks();
     const greeting = activeGender === 'male'
       ? 'Maestro Aurelio listo para analizar tus jugadas.'
       : 'Maestra Valeria lista para analizar tus jugadas.';
     voice.speak(greeting, true);
   };
 
-  const buildStageEl = (mood) => {
+  const buildDockPanel = ({ id, mood, titleText, bodyText, bestText }) => {
     const meta = MOOD_META[mood] || MOOD_META.teach;
     const coachName = activeGender === 'female' ? 'Maestra Valeria' : 'Maestro Aurelio';
 
-    const el = document.createElement('div');
-    el.className = `coach-stage${isSpeaking ? ' speaking' : ''}`;
+    const el = document.createElement('aside');
+    el.id = id;
+    el.className = `coach-dock-panel${isSpeaking ? ' speaking' : ''}`;
     el.dataset.mood = mood;
+    el.dataset.titleText = titleText || '';
+    el.dataset.bodyText = bodyText || '';
+    el.dataset.bestText = bestText || '';
     el.style.setProperty('--coach-aura', meta.color);
+
     el.innerHTML = `
+      <div class="coach-dock-top">
+        <span class="coach-mood-pill">${meta.tag}</span>
+        <button type="button" class="coach-swap-btn" title="Cambiar entre Maestro y Maestra">⇄ Voz</button>
+      </div>
       <div class="coach-portrait">${renderCoachSvg(activeGender, mood)}</div>
-      <div class="coach-meta">
-        <div class="coach-name-row">
-          <span class="coach-name">${coachName}</span>
-          <span class="coach-mood-pill">${meta.tag}</span>
-        </div>
+      <div class="coach-identity">
+        <span class="coach-name">${coachName}</span>
         <div class="coach-wave-row">
           <div class="coach-eq"><span></span><span></span><span></span><span></span><span></span></div>
-          <span class="coach-state-txt">${isSpeaking ? 'Explicando jugada...' : 'Listo para analizar'}</span>
+          <span class="coach-state-txt">${isSpeaking ? 'Explicando...' : 'Listo'}</span>
         </div>
       </div>
-      <button type="button" class="coach-swap-btn" title="Cambiar entre Maestro y Maestra">⇄</button>
+      <div class="coach-bubble">
+        ${titleText ? `<div class="coach-bubble-head">${titleText}</div>` : ''}
+        <div class="coach-bubble-text">${bodyText || ''}</div>
+        ${bestText ? `<div class="coach-bubble-best">💡 ${bestText}</div>` : ''}
+      </div>
     `;
+
     el.querySelector('.coach-swap-btn').addEventListener('click', swapAvatarAndVoice);
     return el;
   };
 
-  const refreshAllStages = () => {
-    document.querySelectorAll('.coach-stage').forEach((oldEl) => {
-      const mood = oldEl.dataset.mood || 'teach';
-      oldEl.replaceWith(buildStageEl(mood));
+  const refreshAllDocks = () => {
+    document.querySelectorAll('.coach-dock-panel').forEach((oldEl) => {
+      oldEl.replaceWith(buildDockPanel({
+        id: oldEl.id,
+        mood: oldEl.dataset.mood || 'teach',
+        titleText: oldEl.dataset.titleText,
+        bodyText: oldEl.dataset.bodyText,
+        bestText: oldEl.dataset.bestText
+      }));
     });
   };
 
+  const closeReviewDock = () => {
+    document.body.classList.remove('review-coach-open');
+    document.getElementById('review-coach-dock')?.remove();
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  };
+
+  // 1. Montar cabina izquierda en el Analizador Post-Partida
   const origReview = app.analyzer._renderReviewPanel.bind(app.analyzer);
   app.analyzer._renderReviewPanel = () => {
     origReview();
-    const box = app.dom.postgameSlot?.querySelector('.an-box');
-    const coachCard = box?.querySelector('.an-coach');
-    if (!box || !coachCard) return;
+    const arena = document.querySelector('main.arena');
+    if (!arena || !app.analyzer.inReview) return;
 
     const ply = app.analyzer.currentPly;
     const item = ply > 0 ? app.analyzer.results[ply - 1] : null;
-    const mood = item ? (item.played?.san?.endsWith('#') ? 'mate' : item.classification) : 'teach';
-    box.insertBefore(buildStageEl(mood), coachCard);
+    let mood = 'teach';
+    let titleText = `Posición inicial #${app.analyzer.positionId}`;
+    let bodyText = 'Usa las flechas ◀ ▶ o toca una jugada del historial para revivirla y escuchar el análisis.';
+    let bestText = '';
+
+    if (item) {
+      mood = item.played?.san?.endsWith('#') ? 'mate' : item.classification;
+      const moveNum = Math.floor((ply - 1) / 2) + 1;
+      const sideText = item.played.color === 'w' ? 'Blancas' : 'Negras';
+      const meta = CLASS_META[item.classification] || { code: '', label: '' };
+      titleText = `${moveNum}. ${sideText}: ${item.played.san} (${meta.code} ${meta.label})`;
+      bodyText = item.comment;
+      if (!item.isExactBest && ['inaccuracy', 'mistake', 'blunder'].includes(item.classification)) {
+        bestText = `Mejor jugada: ${item.bestSan} (flecha verde)`;
+      }
+    }
+
+    const wasOpen = document.body.classList.contains('review-coach-open');
+    document.body.classList.add('review-coach-open');
+
+    const panel = buildDockPanel({ id: 'review-coach-dock', mood, titleText, bodyText, bestText });
+    const existing = document.getElementById('review-coach-dock');
+    if (existing) existing.replaceWith(panel);
+    else arena.prepend(panel);
+
+    if (!wasOpen) {
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    }
   };
 
+  const origExit = app.analyzer.exitReview.bind(app.analyzer);
+  app.analyzer.exitReview = () => { closeReviewDock(); return origExit(); };
+
+  const origReset = app.analyzer.reset.bind(app.analyzer);
+  app.analyzer.reset = () => { closeReviewDock(); return origReset(); };
+
+  // 2. Montar cabina izquierda en la Academia de Aperturas
   if (app.academy) {
+    const syncAcademyDock = () => {
+      const layout = app.academy.container?.querySelector('.tr-layout');
+      if (!layout) return;
+      layout.classList.add('tr-with-coach');
+
+      const stepIdx = app.academy.stepIdx || 0;
+      const lesson = app.academy.lesson;
+      const titleText = stepIdx === 0
+        ? lesson.title
+        : `${lesson.title} · Paso ${stepIdx}/${lesson.steps.length}`;
+      const bodyText = stepIdx === 0
+        ? lesson.summary
+        : lesson.steps[stepIdx - 1].text;
+
+      const panel = buildDockPanel({
+        id: 'academy-coach-dock',
+        mood: 'teach',
+        titleText,
+        bodyText,
+        bestText: ''
+      });
+      const existing = document.getElementById('academy-coach-dock');
+      if (existing) existing.replaceWith(panel);
+      else layout.prepend(panel);
+    };
+
     const origAcademy = app.academy._renderScaffold.bind(app.academy);
     app.academy._renderScaffold = () => {
       origAcademy();
-      const panel = app.academy.container?.querySelector('.tr-panel');
-      const textEl = panel?.querySelector('#ac-text');
-      if (panel && textEl) {
-        panel.insertBefore(buildStageEl('teach'), textEl);
-      }
+      syncAcademyDock();
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
+
+    const origSyncText = app.academy._syncText.bind(app.academy);
+    app.academy._syncText = () => {
+      origSyncText();
+      syncAcademyDock();
     };
   }
 }
