@@ -141,7 +141,6 @@ function ensureSetupStyles() {
       opacity: 0.35 !important; pointer-events: none !important; filter: grayscale(0.8);
     }
 
-    /* Paso 2: Selector de coronación */
     .gs-promo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .gs-promo-btn {
       background: rgba(9, 13, 22, 0.85); border: 1.5px solid var(--border-color);
@@ -156,14 +155,12 @@ function ensureSetupStyles() {
     .gs-promo-icon svg { width: 44px; height: 44px; }
     .gs-promo-btn span { font-size: 0.76rem; font-weight: 800; color: #f8fafc; }
 
-    /* Paso 2: Confirmación de seguridad */
     .gs-confirm-desc { font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); margin: 0; }
     .gs-danger-btn {
       background: linear-gradient(135deg, #e11d48, #be123c) !important;
       border-color: #fb7185 !important; color: #fff !important;
     }
 
-    /* Paso 2: Tarjeta de Revancha Inteligente */
     .gs-rematch-card {
       background: linear-gradient(180deg, rgba(19, 28, 49, 0.96), rgba(9, 13, 22, 0.96));
       border: 1.5px solid rgba(56, 189, 248, 0.45);
@@ -227,10 +224,16 @@ function findBestAiOptionValue(sel, targetElo) {
 }
 
 function findLocalModeValue(sel) {
-  const opt = findMatchingOption(sel, (v, t) =>
-    v.includes('local') || v.includes('pvp') || v === '2p' || t.includes('2 jugadores') || t.includes('local')
+  if (!sel) return 'pvp';
+  const explicit = findMatchingOption(sel, (v, t) =>
+    /local|pvp|2p|human|frente|amigo|2 jug|jugador vs/i.test(`${v} ${t}`)
   );
-  return opt ? opt.value : 'local';
+  if (explicit) return explicit.value;
+  const nonAi = findMatchingOption(sel, (v, t) =>
+    !/ai|ia|stockfish|bot|elo|online|global|sala|red/i.test(`${v} ${t}`)
+  );
+  if (nonAi) return nonAi.value;
+  return 'pvp';
 }
 
 function applyClockPreset(app, clockId) {
@@ -255,9 +258,29 @@ function applyClockPreset(app, clockId) {
 }
 
 function findArenaButton(keyword) {
-  const btns = document.querySelectorAll('main.arena button');
   const kw = keyword.toLowerCase();
-  return Array.from(btns).find(b => (b.textContent || '').toLowerCase().includes(kw)) || null;
+  const arenaBtns = document.querySelectorAll('main.arena button');
+  const direct = Array.from(arenaBtns).find(b => (b.textContent || '').toLowerCase().includes(kw));
+  if (direct) return direct;
+  const fallbackBtns = document.querySelectorAll('button');
+  return Array.from(fallbackBtns).find(b =>
+    !b.closest('.gs-backdrop, #dt-sidebar, .drawer-panel, header') &&
+    b.offsetParent !== null &&
+    (b.textContent || '').toLowerCase().includes(kw)
+  ) || null;
+}
+
+function isBoardFlipped(app) {
+  const grid = document.querySelector('main.arena .board-grid');
+  if (grid) {
+    const firstRank = grid.querySelector('.square .coord-rank');
+    if (firstRank) {
+      const txt = (firstRank.textContent || '').trim();
+      if (txt === '1') return true;
+      if (txt === '8') return false;
+    }
+  }
+  return Boolean(app.flipped);
 }
 
 function applyAssistMode(mode) {
@@ -414,7 +437,38 @@ export function attachGameSetup(app) {
     });
   };
 
-  // Paso 2C: Tarjeta de Revancha Inteligente al terminar partida
+  const ensureBoardOrientation = (wantFlipped) => {
+    if (isBoardFlipped(app) === wantFlipped) return;
+    const flipBtn = findArenaButton('voltear');
+    if (flipBtn) {
+      flipBtn.click();
+    }
+    if (isBoardFlipped(app) !== wantFlipped) {
+      app.flipped = wantFlipped;
+      app.renderBoard?.();
+    }
+  };
+
+  const triggerInvertedRematch = () => {
+    const variant = activeMatch?.variant || (app.engine?.positionId === 518 ? 'classic' : 'fischer960');
+    const curColor = activeMatch?.resolvedColor || (isBoardFlipped(app) ? 'b' : 'w');
+    const nextColor = curColor === 'w' ? 'b' : 'w';
+    const curElo = activeMatch?.elo || savedCfg.elo || 1200;
+
+    launchConfiguredGame(
+      variant,
+      {
+        ...savedCfg,
+        elo: curElo,
+        clock: activeMatch?.clock || savedCfg.clock,
+        mode: activeMatch?.mode || savedCfg.mode,
+        color: nextColor
+      },
+      { persistColor: false }
+    );
+  };
+
+  // Tarjeta de Revancha Inteligente al terminar partida
   const syncRematchCard = () => {
     const existing = document.getElementById('gs-rematch-card');
     const shouldShow =
@@ -430,7 +484,7 @@ export function attachGameSetup(app) {
       return;
     }
 
-    const sig = `${app.engine.positionId}_${app.engine.history?.length || 0}_${app.engine.status}_${app.engine.winner || 'n'}`;
+    const sig = `${app.engine.positionId}_${app.engine.history?.length || 0}_${app.engine.status}_${app.engine.winner || 'n'}_${activeMatch?.resolvedColor || 'x'}`;
     if (existing && rematchSignature === sig) return;
     rematchSignature = sig;
 
@@ -438,7 +492,7 @@ export function attachGameSetup(app) {
     if (!sidePanel) return;
 
     const variant = activeMatch?.variant || (app.engine.positionId === 518 ? 'classic' : 'fischer960');
-    const curColor = activeMatch?.resolvedColor || (app.flipped ? 'b' : 'w');
+    const curColor = activeMatch?.resolvedColor || (isBoardFlipped(app) ? 'b' : 'w');
     const nextColor = curColor === 'w' ? 'b' : 'w';
     const curElo = activeMatch?.elo || savedCfg.elo || 1200;
     const nextEloProf = getNextEloProfile(curElo);
@@ -494,22 +548,22 @@ export function attachGameSetup(app) {
     };
 
     card.querySelector('#gs-rematch-swap')?.addEventListener('click', () => {
-      launchConfiguredGame(variant, { ...baseCfg, color: nextColor });
+      triggerInvertedRematch();
     });
     card.querySelector('#gs-rematch-up')?.addEventListener('click', () => {
       if (nextEloProf) {
-        launchConfiguredGame(variant, { ...baseCfg, elo: nextEloProf.elo, color: curColor });
+        launchConfiguredGame(variant, { ...baseCfg, elo: nextEloProf.elo, color: curColor }, { persistColor: false });
       }
     });
     card.querySelector('#gs-rematch-same')?.addEventListener('click', () => {
-      launchConfiguredGame(variant, { ...baseCfg, color: curColor });
+      launchConfiguredGame(variant, { ...baseCfg, color: curColor }, { persistColor: false });
     });
     card.querySelector('#gs-rematch-cfg')?.addEventListener('click', () => {
       openSetupModal(variant);
     });
   };
 
-  // Paso 2A: Modal completo de coronación (Dama / Torre / Alfil / Caballo)
+  // Modal completo de coronación (Dama / Torre / Alfil / Caballo)
   const openPromotionModal = (color, onPick) => {
     document.getElementById('gs-promo-backdrop')?.remove();
     const backdrop = document.createElement('div');
@@ -565,7 +619,7 @@ export function attachGameSetup(app) {
     document.body.appendChild(backdrop);
   };
 
-  // Paso 2B: Modal de confirmación rápida
+  // Modal de confirmación rápida
   const openConfirmModal = ({ tag, title, desc, confirmLabel, danger = true, onConfirm }) => {
     document.getElementById('gs-confirm-backdrop')?.remove();
     const backdrop = document.createElement('div');
@@ -605,8 +659,9 @@ export function attachGameSetup(app) {
     if (!grid) return null;
     const squares = grid.querySelectorAll('.square');
     if (squares.length !== 64) return null;
-    const vr = app.flipped ? 7 - r : r;
-    const vc = app.flipped ? 7 - c : c;
+    const flipped = isBoardFlipped(app);
+    const vr = flipped ? 7 - r : r;
+    const vc = flipped ? 7 - c : c;
     return squares[vr * 8 + vc] || null;
   };
 
@@ -616,9 +671,10 @@ export function attachGameSetup(app) {
     if (idx < 0 || squares.length !== 64) return null;
     const vr = Math.floor(idx / 8);
     const vc = idx % 8;
+    const flipped = isBoardFlipped(app);
     return {
-      r: app.flipped ? 7 - vr : vr,
-      c: app.flipped ? 7 - vc : vc
+      r: flipped ? 7 - vr : vr,
+      c: flipped ? 7 - vc : vc
     };
   };
 
@@ -627,7 +683,7 @@ export function attachGameSetup(app) {
     if (!grid || !move) return false;
 
     const fromSq = getBoardSquareEl(move.from.r, move.from.c);
-    if (!fromSq) return false;
+    if (!fromSq || !fromSq.querySelector('.piece-wrap')) return false;
     fromSq.click();
 
     setTimeout(() => {
@@ -657,7 +713,7 @@ export function attachGameSetup(app) {
           promoBtn.click();
         }
       }, 110);
-    }, 95);
+    }, 105);
 
     return true;
   };
@@ -706,18 +762,17 @@ export function attachGameSetup(app) {
     }
 
     const prevLen = app.engine.history.length;
-    executeWhiteMoveByClick(chosenMove, token);
+    const okClick = executeWhiteMoveByClick(chosenMove, token);
 
     setTimeout(() => {
       if (token !== blackSession.token) return;
-      if (app.engine?.status === 'playing' && app.engine?.turn === 'w' && app.engine.history.length === prevLen) {
-        blackSession.thinking = false;
-        return;
-      }
       blackSession.thinking = false;
       grid?.classList.remove('gs-ai-locked');
       renderActiveBanner();
-    }, 480);
+      if (!okClick || (app.engine?.status === 'playing' && app.engine?.turn === 'w' && app.engine.history.length === prevLen)) {
+        // Reintento limpio en el siguiente ciclo del vigilante
+      }
+    }, 500);
   };
 
   // Vigilante liviano: turno de Stockfish con Blancas + tarjeta de Revancha Inteligente
@@ -730,12 +785,45 @@ export function attachGameSetup(app) {
     }
   }, 320);
 
-  // Interceptor unificado en fase de captura: Coronación + Confirmaciones + Tarjetas de Inicio
+  // Interceptor unificado en fase de captura
   document.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
     if (e.target.closest('.gs-backdrop')) return;
 
-    // A) Selector de coronación completo (Dama / Torre / Alfil / Caballo)
+    // 0) Bloquear clics manuales sobre el tablero mientras es turno de Stockfish (Blancas)
+    if (
+      blackSession.active &&
+      app.shell?.currentView === 'play' &&
+      !app.analyzer?.inReview &&
+      app.engine?.status === 'playing' &&
+      app.engine?.turn === 'w' &&
+      e.target.closest('main.arena .board-grid')
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // 1) Interceptar botón nativo de "Revancha" al terminar partida para que también invierta colores
+    if (
+      app.shell?.currentView === 'play' &&
+      !app.analyzer?.inReview &&
+      !isOnlineGameActive() &&
+      isGameFinished()
+    ) {
+      const revBtn = e.target.closest('main.arena button');
+      if (revBtn && !revBtn.closest('#gs-rematch-card, #gs-active-banner')) {
+        const txt = (revBtn.textContent || '').toLowerCase();
+        if (txt.includes('revancha')) {
+          e.preventDefault();
+          e.stopPropagation();
+          triggerInvertedRematch();
+          return;
+        }
+      }
+    }
+
+    // 2) Selector de coronación completo (Dama / Torre / Alfil / Caballo)
     if (
       app.shell?.currentView === 'play' &&
       !app.analyzer?.inReview &&
@@ -780,7 +868,6 @@ export function attachGameSetup(app) {
 
                   toSq.click();
 
-                  // Si el juego base también abre su propio selector de coronación, seleccionarlo automáticamente
                   setTimeout(() => {
                     const nativeBtn = document.querySelector(
                       `[data-promo="${chosenType}"], [data-piece="${chosenType}"]`
@@ -798,13 +885,12 @@ export function attachGameSetup(app) {
       }
     }
 
-    // B) Confirmación de seguridad en partida activa (>= 2 jugadas completas)
+    // 3) Confirmación de seguridad en partida activa (>= 2 jugadas completas)
     if (isActiveHumanGameInProgress()) {
       const btn = e.target.closest('button, .dt-sb-brand');
       if (btn && !btn.closest('#gs-active-banner, #gs-rematch-card')) {
         const txt = (btn.textContent || '').trim().toLowerCase();
 
-        // 1. Rendirse
         if (btn.closest('main.arena') && txt.includes('rendirse')) {
           e.preventDefault();
           e.stopPropagation();
@@ -819,7 +905,6 @@ export function attachGameSetup(app) {
           return;
         }
 
-        // 2. Nueva partida / Nueva 960 en barra superior
         if (btn.closest('header, .topbar, .app-header') && (txt.includes('nueva 960') || txt.includes('nueva partida'))) {
           e.preventDefault();
           e.stopPropagation();
@@ -834,7 +919,6 @@ export function attachGameSetup(app) {
           return;
         }
 
-        // 3. Salir del tablero hacia otra sección
         const isSidebarExit = btn.classList.contains('dt-sb-brand') ||
           btn.classList.contains('dt-sb-profile') ||
           (btn.classList.contains('dt-sb-item') && btn.dataset.dtNav && btn.dataset.dtNav !== 'play');
@@ -857,7 +941,7 @@ export function attachGameSetup(app) {
       }
     }
 
-    // C) Interceptar tarjetas de Ajedrez Clásico y Fischer 960 en Inicio
+    // 4) Interceptar tarjetas de Ajedrez Clásico y Fischer 960 en Inicio
     if (app.shell?.currentView !== 'home') return;
     const viewRoot = app.shell?.viewRoot;
     if (!viewRoot || !viewRoot.contains(e.target)) return;
@@ -911,9 +995,12 @@ export function attachGameSetup(app) {
     if (sel && e.target === sel) clearSessions();
   });
 
-  const launchConfiguredGame = (variant, cfg) => {
-    saveSetup(cfg);
-    savedCfg = { ...cfg };
+  const launchConfiguredGame = (variant, cfg, opts = { persistColor: true }) => {
+    const toSave = opts?.persistColor === false
+      ? { ...savedCfg, elo: cfg.elo, clock: cfg.clock, mode: cfg.mode, f960Random: cfg.f960Random, f960Pos: cfg.f960Pos }
+      : { ...cfg };
+    saveSetup(toSave);
+    savedCfg = { ...toSave };
 
     const resolvedColor = cfg.color === 'random'
       ? (Math.random() < 0.5 ? 'w' : 'b')
@@ -941,9 +1028,13 @@ export function attachGameSetup(app) {
       const localVal = findLocalModeValue(sel);
       if (typeof app._setModeProgrammatically === 'function') {
         app._setModeProgrammatically(localVal);
-      } else if (sel) {
-        sel.value = localVal;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (sel && sel.value !== localVal) {
+        const hasOpt = Array.from(sel.options).some(o => o.value === localVal);
+        if (hasOpt) {
+          sel.value = localVal;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
       }
     } else {
       blackSession.active = false;
@@ -951,9 +1042,13 @@ export function attachGameSetup(app) {
       const aiVal = findBestAiOptionValue(sel, cfg.elo);
       if (typeof app._setModeProgrammatically === 'function') {
         app._setModeProgrammatically(aiVal);
-      } else if (sel) {
-        sel.value = aiVal;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (sel && sel.value !== aiVal) {
+        const hasOpt = Array.from(sel.options).some(o => o.value === aiVal);
+        if (hasOpt) {
+          sel.value = aiVal;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
       }
     }
 
@@ -966,25 +1061,20 @@ export function attachGameSetup(app) {
     }
 
     activeMatch = { variant, resolvedColor, elo: cfg.elo, clock: cfg.clock, mode: cfg.mode, posId };
+    const wantFlipped = resolvedColor === 'b';
 
     setTimeout(() => {
-      const wantFlipped = resolvedColor === 'b';
-      if (Boolean(app.flipped) !== wantFlipped) {
-        const flipBtn = findArenaButton('voltear');
-        if (flipBtn) flipBtn.click();
-        else {
-          app.flipped = wantFlipped;
-          app.renderBoard?.();
-        }
-      }
-
+      ensureBoardOrientation(wantFlipped);
       applyAssistMode(cfg.mode);
       renderActiveBanner();
+    }, 100);
 
+    setTimeout(() => {
+      ensureBoardOrientation(wantFlipped);
       if (resolvedColor === 'b') {
-        setTimeout(() => runBlackSessionAiTurn(), 280);
+        runBlackSessionAiTurn();
       }
-    }, 90);
+    }, 340);
   };
 
   const openSetupModal = (variant = 'classic') => {
