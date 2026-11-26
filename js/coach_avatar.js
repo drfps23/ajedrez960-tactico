@@ -2,8 +2,10 @@ import { CLASS_META } from './analyzer.js';
 
 const GENDER_PREF_KEY = 'ajedrez960_coach_avatar_v1';
 
-const MALE_VOICE_RE = /alvaro|álvaro|jorge|pablo|raúl|raul|diego|carlos|alonso|tomás|tomas|enrique|sergio|emilio|gonzalo|gerardo|darío|dario|luciano|juan|mateo|nicolás|nicolas|andrés|andres|rodrigo|esteban|héctor|hector|luis|miguel|david|pedro|antonio|javier|ramón|ramon|eddy|reed|rocko|grandpa|male|hombre/i;
-const FEMALE_VOICE_RE = /dalia|elena|sabina|paulina|salomé|salome|mónica|monica|camila|mía|mia|paloma|laura|lucía|lucia|sofía|sofia|helena|carmen|catalina|francisca|conchita|elisa|isabela|valentina|jimena|ximena|renata|tania|marisol|maría|maria|ana|lupe|angélica|angelica|elvira|irene|vera|triana|abril|flo|sandy|shelley|grandma|female|mujer|google español/i;
+const MALE_VOICE_RE = /alvaro|álvaro|jorge|pablo|raúl|raul|diego|carlos|alonso|tomás|tomas|enrique|sergio|emilio|gonzalo|gerardo|darío|dario|luciano|juan|mateo|nicolás|nicolas|andrés|andres|rodrigo|esteban|héctor|hector|luis|miguel|david|pedro|antonio|javier|ramón|ramon|hombre|male/i;
+const FEMALE_VOICE_RE = /dalia|elena|sabina|paulina|salomé|salome|mónica|monica|camila|mía|mia|paloma|laura|lucía|lucia|sofía|sofia|helena|carmen|catalina|francisca|conchita|elisa|isabela|valentina|jimena|ximena|renata|tania|marisol|maría|maria|ana|lupe|angélica|angelica|elvira|irene|vera|triana|abril|mujer|female|google español/i;
+
+const QUALITY_VOICE_RE = /natural|online|neural|google|dalia|alvaro|álvaro|elena|jorge|sabina|paulina|helena|pablo|monica|mónica/i;
 
 const MOOD_META = {
   book:       { color: '#c084fc', tag: '📖 Teoría',        pose: 'point',     gaze: 'board' },
@@ -17,6 +19,8 @@ const MOOD_META = {
   mate:       { color: '#facc15', tag: '👑 ¡Jaque Mate!',  pose: 'celebrate', gaze: 'user' },
   teach:      { color: '#38bdf8', tag: '🎓 Enseñando',     pose: 'point',     gaze: 'board' }
 };
+
+const CADENCE_SEQ = ['mid', 'wide', 'mid', 'round', 'wide', 'mid', 'idle', 'round', 'wide', 'mid'];
 
 function ensureAvatarStyles() {
   if (document.querySelector('style[data-coach-avatar-css]')) return;
@@ -54,48 +58,47 @@ function ensureAvatarStyles() {
     }
     .coach-dock-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 
-    /* Escenario panorámico de medio cuerpo */
     .coach-stage {
-      width: 100%; height: 158px; border-radius: 14px; position: relative; overflow: hidden;
+      width: 100%; height: 162px; border-radius: 14px; position: relative; overflow: hidden;
       background:
-        radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--coach-aura, #38bdf8) 26%, #1e293b) 0%, #0b1222 72%, #070b15 100%);
-      border: 1.5px solid color-mix(in srgb, var(--coach-aura, #38bdf8) 42%, rgba(148, 163, 184, 0.22));
-      box-shadow: inset 0 -18px 26px rgba(4, 7, 15, 0.72), 0 8px 22px rgba(0, 0, 0, 0.35);
+        radial-gradient(circle at 50% 26%, color-mix(in srgb, var(--coach-aura, #38bdf8) 28%, #1e293b) 0%, #0b1222 72%, #070b15 100%);
+      border: 1.5px solid color-mix(in srgb, var(--coach-aura, #38bdf8) 44%, rgba(148, 163, 184, 0.22));
+      box-shadow: inset 0 -20px 28px rgba(4, 7, 15, 0.78), 0 8px 22px rgba(0, 0, 0, 0.36);
       display: grid; place-items: end center; flex-shrink: 0;
     }
     .coach-stage svg { width: 100%; height: 100%; display: block; }
 
-    /* Capas articuladas del avatar */
-    .ca-body-root { transform-origin: 80px 152px; animation: caBreathe 3.8s ease-in-out infinite; }
-    .ca-head { transform-origin: 80px 92px; transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1); }
-    .ca-eyes { transform-origin: 80px 58px; animation: caBlink 4.8s infinite; }
-    .ca-pupils { transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
-    .ca-brows { transform-origin: 80px 48px; transition: transform 0.22s ease; }
+    /* Capas articuladas suaves */
+    .ca-body-root { transform-origin: 80px 154px; animation: caBreathe 3.8s ease-in-out infinite; }
+    .ca-head { transform-origin: 80px 92px; transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1); }
+    .ca-eyes { transform-origin: 80px 58px; animation: caBlink 4.7s infinite; }
+    .ca-pupils { transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+    .ca-brows { transform-origin: 80px 47px; transition: transform 0.22s ease; }
     .ca-arm-point { transform-origin: 112px 118px; animation: caPointIdle 3.2s ease-in-out infinite; }
-    .ca-arm-think { transform-origin: 106px 124px; animation: caThinkIdle 2.9s ease-in-out infinite; }
+    .ca-arm-think { transform-origin: 106px 124px; animation: caThinkIdle 3s ease-in-out infinite; }
     .ca-arm-shock { transform-origin: 108px 126px; animation: caShockPop 0.55s ease-out; }
-    .ca-arm-celebrate { transform-origin: 112px 122px; animation: caCelebrate 0.9s ease-in-out infinite; }
+    .ca-arm-celebrate { transform-origin: 112px 122px; animation: caCelebrate 0.95s ease-in-out infinite; }
     .ca-spark { transform-origin: center; animation: caSparkle 1.3s ease-in-out infinite; }
 
-    /* Orientación de cabeza y mirada según el estado */
-    .coach-dock-panel[data-gaze="board"] .ca-pupils { transform: translate(2.5px, 0.6px); }
-    .coach-dock-panel[data-gaze="up"] .ca-pupils { transform: translate(1.8px, -1.8px); }
+    /* Mirada y postura por emoción */
+    .coach-dock-panel[data-gaze="board"] .ca-pupils { transform: translate(2.4px, 0.5px); }
+    .coach-dock-panel[data-gaze="up"] .ca-pupils { transform: translate(1.6px, -1.7px); }
     .coach-dock-panel[data-gaze="user"] .ca-pupils { transform: translate(0px, 0px); }
 
-    .coach-dock-panel[data-pose="point"] .ca-head { transform: rotate(2.5deg) translateX(1px); }
-    .coach-dock-panel[data-pose="think"] .ca-head { transform: rotate(-4.5deg) translateY(1px); }
+    .coach-dock-panel[data-pose="point"] .ca-head { transform: rotate(2.2deg) translateX(1px); }
+    .coach-dock-panel[data-pose="think"] .ca-head { transform: rotate(-4deg) translateY(1px); }
     .coach-dock-panel[data-pose="shock"] .ca-head { animation: caHeadShake 0.65s ease-out; }
-    .coach-dock-panel[data-pose="celebrate"] .ca-head { transform: rotate(-2deg) translateY(-1.5px); }
+    .coach-dock-panel[data-pose="celebrate"] .ca-head { transform: rotate(-1.8deg) translateY(-1.5px); }
 
-    /* Dinamismo real al hablar (se activa SOLO en onstart) */
-    .coach-dock-panel.speaking .ca-head { animation: caHeadTalk 1.65s ease-in-out infinite; }
-    .coach-dock-panel.speaking .ca-brows { animation: caBrowTalk 1.2s ease-in-out infinite; }
-    .coach-dock-panel.speaking .ca-arm-point { animation: caPointTalk 0.95s ease-in-out infinite; }
-    .coach-dock-panel.speaking .ca-arm-think { animation: caThinkTalk 1.4s ease-in-out infinite; }
-    .coach-dock-panel.speaking[data-gaze="board"] .ca-pupils { animation: caGlanceTalk 3.6s ease-in-out infinite; }
+    /* Animaciones activas durante todo el habla */
+    .coach-dock-panel.speaking .ca-head { animation: caHeadTalk 1.75s ease-in-out infinite; }
+    .coach-dock-panel.speaking .ca-brows { animation: caBrowTalk 1.25s ease-in-out infinite; }
+    .coach-dock-panel.speaking .ca-arm-point { animation: caPointTalk 1.05s ease-in-out infinite; }
+    .coach-dock-panel.speaking .ca-arm-think { animation: caThinkTalk 1.45s ease-in-out infinite; }
+    .coach-dock-panel.speaking[data-gaze="board"] .ca-pupils { animation: caGlanceTalk 3.8s ease-in-out infinite; }
 
-    /* 4 visemas sincronizados por palabra */
-    .ca-mouth-shape { opacity: 0; transition: opacity 0.055s linear; }
+    /* 4 formas de boca para lip-sync continuo */
+    .ca-mouth-shape { opacity: 0; transition: opacity 0.05s linear; }
     .coach-dock-panel[data-viseme="idle"] .ca-m-idle { opacity: 1; }
     .coach-dock-panel[data-viseme="mid"] .ca-m-mid { opacity: 1; }
     .coach-dock-panel[data-viseme="wide"] .ca-m-wide { opacity: 1; }
@@ -142,50 +145,69 @@ function ensureAvatarStyles() {
       .tr-layout.tr-with-coach { grid-template-columns: 1fr !important; }
       .coach-dock-panel { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px; }
       .coach-dock-top { flex: 1 1 100%; }
-      .coach-stage { width: 116px; height: 106px; }
+      .coach-stage { width: 118px; height: 108px; }
       .coach-identity { flex: 1; flex-direction: column; align-items: flex-start; gap: 4px; }
       .coach-bubble { flex: 1 1 100%; }
     }
 
-    @keyframes caBreathe { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-1.5px) scaleY(1.012); } }
+    @keyframes caBreathe { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-1.4px) scaleY(1.01); } }
     @keyframes caBlink { 0%, 91%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
     @keyframes caHeadTalk {
-      0%, 100% { transform: rotate(1.5deg) translateY(0); }
-      35% { transform: rotate(-2.2deg) translateY(-1.5px); }
-      70% { transform: rotate(3deg) translateY(-0.5px); }
+      0%, 100% { transform: rotate(1.4deg) translateY(0); }
+      35% { transform: rotate(-2deg) translateY(-1.4px); }
+      70% { transform: rotate(2.6deg) translateY(-0.4px); }
     }
     @keyframes caBrowTalk {
       0%, 100% { transform: translateY(0); }
-      45% { transform: translateY(-1.6px); }
+      45% { transform: translateY(-1.5px); }
     }
     @keyframes caGlanceTalk {
-      0%, 42%, 100% { transform: translate(2.6px, 0.5px); }
+      0%, 42%, 100% { transform: translate(2.4px, 0.5px); }
       56%, 80% { transform: translate(0px, 0px); }
     }
-    @keyframes caPointIdle { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-2.8deg); } }
+    @keyframes caPointIdle { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-2.5deg); } }
     @keyframes caPointTalk {
       0%, 100% { transform: rotate(0deg) translateY(0); }
-      40% { transform: rotate(-8deg) translateY(-3px); }
-      75% { transform: rotate(2deg) translateY(-1px); }
+      40% { transform: rotate(-7deg) translateY(-2.5px); }
+      75% { transform: rotate(1.8deg) translateY(-0.8px); }
     }
-    @keyframes caThinkIdle { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(2deg); } }
-    @keyframes caThinkTalk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-4deg) translateY(-1.5px); } }
+    @keyframes caThinkIdle { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(1.8deg); } }
+    @keyframes caThinkTalk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-3.8deg) translateY(-1.4px); } }
     @keyframes caHeadShake {
       0% { transform: rotate(0deg); }
-      22% { transform: rotate(-7deg); }
-      52% { transform: rotate(6deg); }
+      22% { transform: rotate(-6.5deg); }
+      52% { transform: rotate(5.5deg); }
       78% { transform: rotate(-3deg); }
       100% { transform: rotate(-2deg); }
     }
-    @keyframes caShockPop { 0% { transform: translateY(12px) rotate(12deg); opacity: 0.7; } 100% { transform: translateY(0) rotate(0deg); opacity: 1; } }
+    @keyframes caShockPop { 0% { transform: translateY(10px) rotate(10deg); opacity: 0.75; } 100% { transform: translateY(0) rotate(0deg); opacity: 1; } }
     @keyframes caCelebrate {
       0%, 100% { transform: rotate(0deg) translateY(0); }
-      50% { transform: rotate(-7deg) translateY(-4px); }
+      50% { transform: rotate(-6.5deg) translateY(-3.5px); }
     }
     @keyframes caSparkle { 0%, 100% { opacity: 0.45; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.18); } }
     @keyframes coachEq { 0% { height: 3px; } 100% { height: 14px; } }
   `;
   document.head.appendChild(style);
+}
+
+function isSpanishVoice(v) {
+  if (!v) return false;
+  const lang = String(v.lang || '').toLowerCase();
+  const name = String(v.name || '').toLowerCase();
+  if (!/^es([-_]|$)/.test(lang)) return false;
+  if (/\b(english|inglés|ingles|en-us|en-gb)\b/.test(name)) return false;
+  return true;
+}
+
+function getStrictSpanishVoices() {
+  const all = window.speechSynthesis?.getVoices?.() || [];
+  const es = all.filter(isSpanishVoice);
+  return es.sort((a, b) => {
+    const qa = QUALITY_VOICE_RE.test(a.name || '') ? 1 : 0;
+    const qb = QUALITY_VOICE_RE.test(b.name || '') ? 1 : 0;
+    return qb - qa;
+  });
 }
 
 function detectVoiceGender(voiceObj) {
@@ -195,113 +217,121 @@ function detectVoiceGender(voiceObj) {
   return 'neutral';
 }
 
+function cleanSpeechText(raw) {
+  return String(raw || '')
+    .replace(/O-O-O|0-0-0/g, 'enroque largo')
+    .replace(/O-O|0-0/g, 'enroque corto')
+    .replace(/→/g, ' a ')
+    .replace(/·/g, ', ')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[✓✕★▶◀⏭]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function pickVisemeForWord(word, prevViseme) {
   const clean = String(word || '').toLowerCase().replace(/[^a-záéíóúüñ]/g, '');
   if (!clean) return 'idle';
   const hasRound = /[ouóú]/.test(clean);
   const hasWide = /[aá]/.test(clean);
-  let next = 'mid';
-  if (hasRound && !hasWide) next = 'round';
-  else if (hasWide && !hasRound) next = 'wide';
-  else if (hasRound && hasWide) next = prevViseme === 'wide' ? 'round' : 'wide';
-  else next = prevViseme === 'mid' ? 'wide' : 'mid';
-  return next;
+  if (hasRound && !hasWide) return 'round';
+  if (hasWide && !hasRound) return 'wide';
+  if (hasRound && hasWide) return prevViseme === 'wide' ? 'round' : 'wide';
+  return prevViseme === 'mid' ? 'wide' : 'mid';
 }
 
-function renderCoachSvg(gender, mood) {
+function renderCoachSvg(gender, mood, uid = 'ca') {
   const isF = gender === 'female';
   const meta = MOOD_META[mood] || MOOD_META.teach;
   const accent = meta.color;
   const pose = meta.pose;
+  const g = `${uid}-${gender}`;
 
-  const skin = isF ? '#f4c7a3' : '#e8b38c';
-  const skinShade = isF ? '#d89f78' : '#ca9169';
-  const hair = isF ? '#2a182d' : '#1b2434';
-  const hairHi = isF ? '#4c2c52' : '#334155';
-  const suit = isF ? '#2e2768' : '#132038';
-  const suitEdge = isF ? '#4c429c' : '#263a5e';
+  const skinTop = isF ? '#f8d2b4' : '#edc09c';
+  const skinBot = isF ? '#e3ac86' : '#d39a72';
+  const skinShade = isF ? '#c88c66' : '#b77d56';
+  const hair = isF ? '#261529' : '#182130';
+  const hairHi = isF ? '#52305a' : '#334155';
+  const suitTop = isF ? '#37307a' : '#182947';
+  const suitBot = isF ? '#1e1947' : '#0d172a';
+  const suitEdge = isF ? '#5c52b3' : '#2f4875';
   const iris = isF ? '#1e3a5f' : '#1e293b';
 
-  // Cejas expresivas por emoción
-  let brows = `<path d="M62 50q5-3 10-.5M88 49.5q5-2.5 10 .5" stroke="#1b1620" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+  // Cejas por emoción
+  let brows = `<path d="M62 49.5q5-2.8 10-.4M88 49.1q5-2.4 10 .4" stroke="#1b1620" stroke-width="2.5" fill="none" stroke-linecap="round"/>`;
   if (mood === 'blunder') {
-    brows = `<path d="M61 52l11-4M99 52l-11-4" stroke="#1b1620" stroke-width="2.8" fill="none" stroke-linecap="round"/>`;
+    brows = `<path d="M61 52l11-4M99 52l-11-4" stroke="#1b1620" stroke-width="2.7" fill="none" stroke-linecap="round"/>`;
   } else if (mood === 'mistake') {
-    brows = `<path d="M62 51.5l10-2.5M98 51.5l-10-2.5" stroke="#1b1620" stroke-width="2.7" fill="none" stroke-linecap="round"/>`;
+    brows = `<path d="M62 51l10-2.4M98 51l-10-2.4" stroke="#1b1620" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
   } else if (mood === 'inaccuracy') {
-    brows = `<path d="M62 51.5h10M88 48.5q5-3.4 10 0" stroke="#1b1620" stroke-width="2.7" fill="none" stroke-linecap="round"/>`;
+    brows = `<path d="M62 51h10M88 48q5-3.4 10 0" stroke="#1b1620" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
   } else if (mood === 'brilliant' || mood === 'mate') {
-    brows = `<path d="M61 48q5.5-3.8 11-.8M88 47.2q5.5-3 11 .8" stroke="#1b1620" stroke-width="2.7" fill="none" stroke-linecap="round"/>`;
+    brows = `<path d="M61 47.5q5.5-3.6 11-.8M88 46.7q5.5-2.8 11 .8" stroke="#1b1620" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
   }
 
-  // Boca en reposo según emoción (visema idle)
-  let idleMouth = `<path d="M72 76.5q8 5.2 16 0" stroke="#7c2d12" stroke-width="2.5" fill="none" stroke-linecap="round"/>`;
+  // Boca en reposo según emoción
+  let idleMouth = `<path d="M72.5 76q7.5 4.8 15 0" stroke="#7c2d12" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
   if (mood === 'blunder') {
-    idleMouth = `<ellipse cx="80" cy="77.5" rx="4.6" ry="3.8" fill="#6b1d24" stroke="#9f3a3a" stroke-width="1"/>`;
+    idleMouth = `<ellipse cx="80" cy="77.2" rx="4.4" ry="3.5" fill="#6b1d24" stroke="#9f3a3a" stroke-width="1"/>`;
   } else if (mood === 'mistake' || mood === 'inaccuracy') {
-    idleMouth = `<path d="M73 78.5q7-3.4 14 0" stroke="#7c2d12" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+    idleMouth = `<path d="M73 78q7-3.2 14 0" stroke="#7c2d12" stroke-width="2.3" fill="none" stroke-linecap="round"/>`;
   } else if (mood === 'brilliant' || mood === 'mate') {
-    idleMouth = `<path d="M70.5 75.5q9.5 8.2 19 0z" fill="#ffffff" stroke="#7c2d12" stroke-width="1.6"/>`;
+    idleMouth = `<path d="M71 75q9 7.8 18 0z" fill="#ffffff" stroke="#7c2d12" stroke-width="1.5"/>`;
   }
 
-  // Cabello trasero y delantero
   const hairBack = isF
-    ? `<path d="M47 58c0-21 13-34 33-34s33 13 33 34v34c-7 5-14 6-20 4V66H67v30c-6 2-13 1-20-4V58z" fill="${hair}"/>`
-    : `<path d="M53 53c0-18 11-29 27-29s27 11 27 29v10H53V53z" fill="${hair}"/>`;
+    ? `<path d="M46 58c0-22 14-35 34-35s34 13 34 35v36c-7 5-15 6-21 4V66H67v32c-6 2-14 1-21-4V58z" fill="${hair}"/>`
+    : `<path d="M53 52c0-18 11-29 27-29s27 11 27 29v10H53V52z" fill="${hair}"/>`;
 
   const hairFront = isF
     ? `<path d="M54 50c4-15 13-22 26-22 12 0 21 6 26 20-8-6-16-9-25-9-11 0-20 4-27 11z" fill="${hair}"/>
-       <path d="M62 35q16-6 32 3" stroke="${hairHi}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.65"/>
-       <circle cx="56.5" cy="68" r="2.6" fill="${accent}"/>
-       <circle cx="103.5" cy="68" r="2.6" fill="${accent}"/>`
-    : `<path d="M54 48c2-14 12-21 26-21 13 0 23 7 26 21-8-8-17-10-26-10-9 0-18 2-26 10z" fill="${hair}"/>
-       <path d="M64 33q15-5 29 2" stroke="${hairHi}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.6"/>
-       <path d="M60 72c3 12 10 18 20 18s17-6 20-18c-4 6.5-11 10-20 10s-16-3.5-20-10z" fill="${hair}" opacity="0.62"/>`;
+       <path d="M62 34q16-6 32 3" stroke="${hairHi}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.7"/>
+       <circle cx="56.5" cy="67" r="2.5" fill="${accent}"/>
+       <circle cx="103.5" cy="67" r="2.5" fill="${accent}"/>`
+    : `<path d="M54 47c2-14 12-21 26-21 13 0 23 7 26 21-8-8-17-10-26-10-9 0-18 2-26 10z" fill="${hair}"/>
+       <path d="M64 32q15-5 29 2" stroke="${hairHi}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.65"/>
+       <path d="M60 72c3 11 10 17 20 17s17-6 20-17c-4 6-11 9.5-20 9.5s-16-3.5-20-9.5z" fill="${hair}" opacity="0.56"/>`;
 
-  // Brazos y manos articuladas según pose
+  // Brazos y manos articuladas
   let armMarkup = '';
   if (pose === 'point') {
-    // Brazo derecho extendido señalando el tablero a la derecha
     armMarkup = `
       <g class="ca-arm-point">
-        <path d="M108 116c12 4 21 2 28-6" stroke="${suit}" stroke-width="15" stroke-linecap="round" fill="none"/>
-        <path d="M108 116c12 4 21 2 28-6" stroke="${suitEdge}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-        <circle cx="137" cy="108" r="7.5" fill="${skin}"/>
-        <path d="M141 106l10-3.5" stroke="${skin}" stroke-width="4.2" stroke-linecap="round"/>
-        <path d="M135 103l5-5" stroke="${skin}" stroke-width="3.6" stroke-linecap="round"/>
-        <path d="M138 111l7-1" stroke="${skinShade}" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M108 116c11 4 20 2 27-6" stroke="url(#${g}-suit)" stroke-width="15" stroke-linecap="round" fill="none"/>
+        <path d="M108 116c11 4 20 2 27-6" stroke="${suitEdge}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+        <ellipse cx="136" cy="108" rx="7.5" ry="6.4" fill="url(#${g}-skin)"/>
+        <path d="M140 106.5l10-3.2" stroke="${skinTop}" stroke-width="4" stroke-linecap="round"/>
+        <path d="M135 103.5l5-4.8" stroke="${skinTop}" stroke-width="3.4" stroke-linecap="round"/>
+        <path d="M137 111.5l7.2-.8" stroke="${skinShade}" stroke-width="3" stroke-linecap="round"/>
       </g>
     `;
   } else if (pose === 'think') {
-    // Mano apoyada en el mentón pensando
     armMarkup = `
       <g class="ca-arm-think">
-        <path d="M111 124c4-14 2-26-11-36" stroke="${suit}" stroke-width="14" stroke-linecap="round" fill="none"/>
+        <path d="M111 124c4-14 2-26-11-36" stroke="url(#${g}-suit)" stroke-width="14" stroke-linecap="round" fill="none"/>
         <path d="M111 124c4-14 2-26-11-36" stroke="${suitEdge}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-        <ellipse cx="95" cy="86" rx="7.5" ry="6.2" fill="${skin}"/>
-        <path d="M89 85l-6 1.5M92 81l-4-5" stroke="${skin}" stroke-width="3.6" stroke-linecap="round"/>
-        <path d="M90 88q5 2 9-1" stroke="${skinShade}" stroke-width="1.6" fill="none"/>
+        <ellipse cx="95" cy="86" rx="7.2" ry="6" fill="url(#${g}-skin)"/>
+        <path d="M89 85.2l-6 1.4M92 81.2l-4-5" stroke="${skinTop}" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M90 88q5 2 9-1" stroke="${skinShade}" stroke-width="1.5" fill="none"/>
       </g>
     `;
   } else if (pose === 'shock') {
-    // Mano a la sien/frente por error grave
     armMarkup = `
       <g class="ca-arm-shock">
-        <path d="M113 125c10-16 11-37 0-56" stroke="${suit}" stroke-width="14" stroke-linecap="round" fill="none"/>
+        <path d="M113 125c10-16 11-37 0-56" stroke="url(#${g}-suit)" stroke-width="14" stroke-linecap="round" fill="none"/>
         <path d="M113 125c10-16 11-37 0-56" stroke="${suitEdge}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-        <ellipse cx="107" cy="61" rx="7.2" ry="8.5" transform="rotate(-14 107 61)" fill="${skin}"/>
-        <path d="M101 55l-6-4M104 52l-3-6M109 53l1-6" stroke="${skin}" stroke-width="3.2" stroke-linecap="round"/>
+        <ellipse cx="107" cy="61" rx="7" ry="8.2" transform="rotate(-14 107 61)" fill="url(#${g}-skin)"/>
+        <path d="M101 55l-6-4M104 52l-3-6M109 53l1-6" stroke="${skinTop}" stroke-width="3.1" stroke-linecap="round"/>
       </g>
     `;
   } else {
-    // Celebración con brazo arriba y destellos
     armMarkup = `
       <g class="ca-arm-celebrate">
-        <path d="M112 119c14-9 21-22 21-38" stroke="${suit}" stroke-width="14.5" stroke-linecap="round" fill="none"/>
+        <path d="M112 119c14-9 21-22 21-38" stroke="url(#${g}-suit)" stroke-width="14.5" stroke-linecap="round" fill="none"/>
         <path d="M112 119c14-9 21-22 21-38" stroke="${suitEdge}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-        <circle cx="133" cy="76" r="8" fill="${skin}"/>
-        <path d="M132 69l1-9" stroke="${skin}" stroke-width="4.4" stroke-linecap="round"/>
-        <path d="M128 74h9M128 78h8" stroke="${skinShade}" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="133" cy="76" r="7.8" fill="url(#${g}-skin)"/>
+        <path d="M132 69l1-9" stroke="${skinTop}" stroke-width="4.2" stroke-linecap="round"/>
+        <path d="M128 74h9M128 78h8" stroke="${skinShade}" stroke-width="1.5" stroke-linecap="round"/>
       </g>
     `;
   }
@@ -321,76 +351,76 @@ function renderCoachSvg(gender, mood) {
 
   return `
     <svg viewBox="0 0 160 155" aria-hidden="true">
-      <!-- Fondo sutil con silueta de pieza -->
-      <circle cx="80" cy="68" r="56" fill="${accent}" opacity="0.08"/>
-      <text x="16" y="136" font-size="38" fill="${accent}" opacity="0.11" font-family="serif">♞</text>
+      <defs>
+        <linearGradient id="${g}-skin" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${skinTop}"/>
+          <stop offset="100%" stop-color="${skinBot}"/>
+        </linearGradient>
+        <linearGradient id="${g}-suit" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${suitTop}"/>
+          <stop offset="100%" stop-color="${suitBot}"/>
+        </linearGradient>
+      </defs>
+
+      <circle cx="80" cy="68" r="56" fill="${accent}" opacity="0.09"/>
+      <text x="14" y="136" font-size="38" fill="${accent}" opacity="0.11" font-family="serif">♞</text>
 
       <g class="ca-body-root">
-        <!-- Torso y chaqueta -->
         <g class="ca-torso">
-          <path d="M32 155c4-31 19-46 48-46s44 15 48 46H32z" fill="${suit}" stroke="${accent}" stroke-width="1.8"/>
-          <path d="M65 109l15 26 15-26" fill="#f8fafc" opacity="0.94"/>
+          <path d="M30 155c4-31 20-46 50-46s46 15 50 46H30z" fill="url(#${g}-suit)" stroke="${accent}" stroke-width="1.6"/>
+          <path d="M65 109l15 26 15-26" fill="#f8fafc" opacity="0.95"/>
           <path d="M58 111l14 25-6 19M102 111l-14 25 6 19" stroke="${suitEdge}" stroke-width="2" fill="none"/>
           ${neckAccent}
-          <!-- Hombro izquierdo relajado -->
-          <path d="M46 122c-6 10-8 21-8 33" stroke="${suitEdge}" stroke-width="2" fill="none" opacity="0.7"/>
+          <path d="M46 121c-6 11-9 22-9 34" stroke="${suitEdge}" stroke-width="2.2" fill="none" opacity="0.72"/>
         </g>
 
-        <!-- Cuello -->
-        <rect x="70" y="88" width="20" height="23" rx="9" fill="${skinShade}"/>
+        <rect x="70" y="87" width="20" height="24" rx="9" fill="${skinShade}"/>
 
-        <!-- Cabeza articulada -->
         <g class="ca-head">
           ${hairBack}
-          <!-- Orejas -->
-          <ellipse cx="56" cy="61" rx="4.2" ry="6.2" fill="${skinShade}"/>
-          <ellipse cx="104" cy="61" rx="4.2" ry="6.2" fill="${skinShade}"/>
-          <!-- Rostro -->
-          <ellipse cx="80" cy="60" rx="23.5" ry="26.5" fill="${skin}"/>
-          <!-- Rubor sutil -->
-          <ellipse cx="64" cy="68" rx="4.5" ry="2.2" fill="#fb7185" opacity="0.22"/>
-          <ellipse cx="96" cy="68" rx="4.5" ry="2.2" fill="#fb7185" opacity="0.22"/>
+          <ellipse cx="56.5" cy="61" rx="4" ry="6" fill="${skinShade}"/>
+          <ellipse cx="103.5" cy="61" rx="4" ry="6" fill="${skinShade}"/>
+          <!-- Rostro con mandíbula definida -->
+          <path d="M57 58c0-15.5 10-25.5 23-25.5s23 10 23 25.5c0 14.5-8.5 28.5-23 29.5-14.5-1-23-15-23-29.5z" fill="url(#${g}-skin)"/>
+          <ellipse cx="64.5" cy="67.5" rx="4.4" ry="2.1" fill="#fb7185" opacity="0.22"/>
+          <ellipse cx="95.5" cy="67.5" rx="4.4" ry="2.1" fill="#fb7185" opacity="0.22"/>
           ${hairFront}
 
-          <!-- Cejas -->
           <g class="ca-brows">${brows}</g>
 
-          <!-- Ojos con seguimiento visual independiente -->
           <g class="ca-eyes">
-            <ellipse cx="68" cy="59" rx="5.5" ry="4.5" fill="#ffffff"/>
-            <ellipse cx="92" cy="59" rx="5.5" ry="4.5" fill="#ffffff"/>
+            <ellipse cx="68" cy="58.5" rx="5.4" ry="4.4" fill="#ffffff"/>
+            <ellipse cx="92" cy="58.5" rx="5.4" ry="4.4" fill="#ffffff"/>
             <g class="ca-pupils">
-              <circle cx="68" cy="59" r="3" fill="${iris}"/>
-              <circle cx="92" cy="59" r="3" fill="${iris}"/>
-              <circle cx="68" cy="59" r="1.5" fill="#090d16"/>
-              <circle cx="92" cy="59" r="1.5" fill="#090d16"/>
-              <circle cx="66.8" cy="57.7" r="1.05" fill="#ffffff"/>
-              <circle cx="90.8" cy="57.7" r="1.05" fill="#ffffff"/>
+              <circle cx="68" cy="58.5" r="2.9" fill="${iris}"/>
+              <circle cx="92" cy="58.5" r="2.9" fill="${iris}"/>
+              <circle cx="68" cy="58.5" r="1.45" fill="#090d16"/>
+              <circle cx="92" cy="58.5" r="1.45" fill="#090d16"/>
+              <circle cx="66.8" cy="57.2" r="1" fill="#ffffff"/>
+              <circle cx="90.8" cy="57.2" r="1" fill="#ffffff"/>
             </g>
-            <path d="M62.5 57.5q5.5-3.2 11 0M86.5 57.5q5.5-3.2 11 0" stroke="#1b1620" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+            <path d="M62.5 57q5.5-3.1 11 0M86.5 57q5.5-3.1 11 0" stroke="#1b1620" stroke-width="1.4" fill="none" stroke-linecap="round"/>
           </g>
 
-          <!-- Nariz -->
-          <path d="M80 61v7.2l-2.3 1.1" stroke="${skinShade}" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+          <path d="M80 60.5v7l-2.2 1.1" stroke="${skinShade}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 
-          <!-- 4 formas de boca para lip-sync real -->
+          <!-- 4 formas de boca sincronizadas -->
           <g class="ca-mouth-shape ca-m-idle">${idleMouth}</g>
           <g class="ca-mouth-shape ca-m-mid">
-            <path d="M72.5 76q7.5 1.8 15 0c-1 4.2-4 6.2-7.5 6.2s-6.5-2-7.5-6.2z" fill="#7f1d1d" stroke="#5b1515" stroke-width="1"/>
-            <path d="M74.5 76.6h11" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M72.5 75.5q7.5 1.8 15 0c-1 4.2-4 6.2-7.5 6.2s-6.5-2-7.5-6.2z" fill="#7f1d1d" stroke="#5b1515" stroke-width="1"/>
+            <path d="M74.5 76.2h11" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>
           </g>
           <g class="ca-mouth-shape ca-m-wide">
-            <path d="M71 75q9 2 18 0c-1.2 7.2-4.6 10.2-9 10.2S72.2 82.2 71 75z" fill="#6b161b" stroke="#5b1515" stroke-width="1"/>
-            <path d="M73.5 75.9h13" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
-            <ellipse cx="80" cy="83.4" rx="4.5" ry="1.8" fill="#fb7185" opacity="0.85"/>
+            <path d="M71.5 74.8q8.5 1.9 17 0c-1.1 7-4.4 9.8-8.5 9.8s-7.4-2.8-8.5-9.8z" fill="#6b161b" stroke="#5b1515" stroke-width="1"/>
+            <path d="M73.8 75.6h12.4" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round"/>
+            <ellipse cx="80" cy="82.8" rx="4.2" ry="1.7" fill="#fb7185" opacity="0.85"/>
           </g>
           <g class="ca-mouth-shape ca-m-round">
-            <ellipse cx="80" cy="78.2" rx="4.5" ry="4.8" fill="#6b161b" stroke="#7c2d12" stroke-width="1.3"/>
-            <ellipse cx="80" cy="81.2" rx="2.3" ry="1.2" fill="#fb7185" opacity="0.7"/>
+            <ellipse cx="80" cy="77.8" rx="4.4" ry="4.6" fill="#6b161b" stroke="#7c2d12" stroke-width="1.2"/>
+            <ellipse cx="80" cy="80.6" rx="2.2" ry="1.1" fill="#fb7185" opacity="0.7"/>
           </g>
         </g>
 
-        <!-- Brazos y manos articuladas -->
         ${armMarkup}
       </g>
 
@@ -408,17 +438,24 @@ export function attachCoachAvatar(app) {
   try {
     const saved = localStorage.getItem(GENDER_PREF_KEY);
     if (saved === 'male' || saved === 'female') activeGender = saved;
-    else if (detectVoiceGender(voice.voice) === 'male') activeGender = 'male';
+    else if (isSpanishVoice(voice.voice) && detectVoiceGender(voice.voice) === 'male') activeGender = 'male';
   } catch { /* ignorar */ }
+
+  let cachedEsVoices = getStrictSpanishVoices();
+  if (window.speechSynthesis?.addEventListener) {
+    window.speechSynthesis.addEventListener('voiceschanged', () => {
+      cachedEsVoices = getStrictSpanishVoices();
+    });
+  }
 
   let isSpeaking = false;
   let currentViseme = 'idle';
   let speakToken = 0;
+  let activeUtter = null;
   let pollTimer = null;
   let speakDelayTimer = null;
   let mouthCloseTimer = null;
-  let fallbackTimer = null;
-  let fallbackStartTimer = null;
+  let cadenceTimer = null;
 
   const setViseme = (v) => {
     currentViseme = v;
@@ -440,87 +477,84 @@ export function attachCoachAvatar(app) {
 
   const stopAllTimers = () => {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (cadenceTimer) { clearInterval(cadenceTimer); cadenceTimer = null; }
     if (speakDelayTimer) { clearTimeout(speakDelayTimer); speakDelayTimer = null; }
     if (mouthCloseTimer) { clearTimeout(mouthCloseTimer); mouthCloseTimer = null; }
-    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-    if (fallbackStartTimer) { clearTimeout(fallbackStartTimer); fallbackStartTimer = null; }
   };
 
-  const resolveVoiceProfile = (targetGender) => {
-    if (!voice.spanishVoices || voice.spanishVoices.length === 0) voice._refreshVoices();
-    const list = voice.spanishVoices || [];
-    const current = voice.voice || list[0] || null;
-    const currentG = detectVoiceGender(current);
+  // Selección estricta SOLO en español (nunca cae en voces inglesas)
+  const resolveSpanishVoiceProfile = (targetGender) => {
+    const fresh = getStrictSpanishVoices();
+    if (fresh.length) cachedEsVoices = fresh;
+    const esList = cachedEsVoices;
 
-    if (current && currentG === targetGender) {
-      return { voiceObj: current, pitch: targetGender === 'male' ? 0.94 : 1.05, rate: targetGender === 'male' ? 0.99 : 1.03 };
+    const currentEs = isSpanishVoice(voice.voice) ? voice.voice : null;
+    if (currentEs && detectVoiceGender(currentEs) === targetGender) {
+      return {
+        voiceObj: currentEs,
+        lang: currentEs.lang || 'es-ES',
+        pitch: targetGender === 'male' ? 0.94 : 1.04,
+        rate: targetGender === 'male' ? 0.98 : 1.02
+      };
     }
-    const nativeMatch = list.find(v => detectVoiceGender(v) === targetGender);
-    if (nativeMatch) {
-      return { voiceObj: nativeMatch, pitch: targetGender === 'male' ? 0.94 : 1.05, rate: targetGender === 'male' ? 0.99 : 1.03 };
+
+    const genderMatch = esList.find(v => detectVoiceGender(v) === targetGender);
+    if (genderMatch) {
+      return {
+        voiceObj: genderMatch,
+        lang: genderMatch.lang || 'es-ES',
+        pitch: targetGender === 'male' ? 0.94 : 1.04,
+        rate: targetGender === 'male' ? 0.98 : 1.02
+      };
     }
-    return { voiceObj: current, pitch: targetGender === 'male' ? 0.66 : 1.26, rate: targetGender === 'male' ? 0.95 : 1.05 };
-  };
 
-  const runSyllableFallback = (text, token) => {
-    const tokens = String(text || '').split(/\s+/).filter(Boolean);
-    let idx = 0;
-
-    const step = () => {
-      if (token !== speakToken || !isSpeaking) return;
-      if (idx >= tokens.length) {
-        setViseme('idle');
-        return;
-      }
-      const w = tokens[idx++];
-      const vis = pickVisemeForWord(w, currentViseme);
-      setViseme(vis);
-
-      const hasHardPause = /[.!?]$/.test(w);
-      const hasSoftPause = /[,;:]$/.test(w);
-      const speakDur = Math.max(95, Math.min(260, w.length * 36));
-
-      mouthCloseTimer = setTimeout(() => {
-        if (token !== speakToken || !isSpeaking) return;
-        setViseme(hasHardPause || hasSoftPause ? 'idle' : 'mid');
-      }, Math.round(speakDur * 0.72));
-
-      const pauseExtra = hasHardPause ? 280 : hasSoftPause ? 150 : 45;
-      fallbackTimer = setTimeout(step, speakDur + pauseExtra);
+    const anyEs = currentEs || esList[0] || null;
+    return {
+      voiceObj: anyEs,
+      lang: anyEs?.lang || 'es-ES',
+      pitch: targetGender === 'male' ? 0.76 : 1.18,
+      rate: targetGender === 'male' ? 0.95 : 1.03
     };
-
-    step();
   };
 
   const origStop = voice.stop.bind(voice);
   voice.stop = () => {
     speakToken++;
+    activeUtter = null;
     stopAllTimers();
     syncSpeakingUI(false);
     return origStop();
   };
 
-  voice.speak = (text, force = false) => {
+  voice.speak = (rawText, force = false) => {
+    const text = cleanSpeechText(rawText);
     if (!voice.supported || (!voice.enabled && !force) || !text) return;
     voice.stop();
 
     const myToken = ++speakToken;
-    const prof = resolveVoiceProfile(activeGender);
-    const maxMs = Math.max(2600, Math.min(24000, text.length * 98));
+    const prof = resolveSpanishVoiceProfile(activeGender);
+    const maxMs = Math.max(6500, Math.min(45000, text.length * 165));
 
     speakDelayTimer = setTimeout(() => {
       if (myToken !== speakToken) return;
       speakDelayTimer = null;
 
+      try {
+        if (window.speechSynthesis?.paused) window.speechSynthesis.resume();
+      } catch { /* ignorar */ }
+
       const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = prof.voiceObj?.lang || 'es-ES';
+      activeUtter = utter;
+      utter.lang = prof.lang || 'es-ES';
       if (prof.voiceObj) utter.voice = prof.voiceObj;
       utter.pitch = prof.pitch;
       utter.rate = prof.rate;
 
       let started = false;
-      let boundaryHits = 0;
       let startAt = 0;
+      let lastBoundaryAt = 0;
+      let cadenceIdx = 0;
+      let silentPolls = 0;
 
       const beginSpeaking = () => {
         if (started || myToken !== speakToken) return;
@@ -529,15 +563,22 @@ export function attachCoachAvatar(app) {
         syncSpeakingUI(true);
         setViseme('mid');
 
-        // Si el navegador no dispara onboundary, arranca cadencia natural basada en el texto
-        fallbackStartTimer = setTimeout(() => {
-          if (myToken !== speakToken || !isSpeaking || boundaryHits > 0) return;
-          runSyllableFallback(text, myToken);
-        }, 340);
+        // Pulso continuo: si onboundary deja de disparar a mitad de frase, la boca sigue viva hasta onend
+        cadenceTimer = setInterval(() => {
+          if (myToken !== speakToken || !isSpeaking) {
+            if (cadenceTimer) { clearInterval(cadenceTimer); cadenceTimer = null; }
+            return;
+          }
+          if (performance.now() - lastBoundaryAt < 300) return;
+          const next = CADENCE_SEQ[cadenceIdx % CADENCE_SEQ.length];
+          cadenceIdx++;
+          setViseme(next);
+        }, 125);
       };
 
       const finishSpeaking = () => {
         if (myToken !== speakToken) return;
+        activeUtter = null;
         stopAllTimers();
         syncSpeakingUI(false);
       };
@@ -549,9 +590,7 @@ export function attachCoachAvatar(app) {
         if (!started) beginSpeaking();
         if (ev.name && ev.name !== 'word') return;
 
-        boundaryHits++;
-        if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-        if (fallbackStartTimer) { clearTimeout(fallbackStartTimer); fallbackStartTimer = null; }
+        lastBoundaryAt = performance.now();
         if (mouthCloseTimer) { clearTimeout(mouthCloseTimer); mouthCloseTimer = null; }
 
         const slice = text.slice(ev.charIndex || 0);
@@ -560,7 +599,7 @@ export function attachCoachAvatar(app) {
         const vis = pickVisemeForWord(word, currentViseme);
         setViseme(vis);
 
-        const closeAfter = Math.max(115, Math.min(240, word.length * 32));
+        const closeAfter = Math.max(115, Math.min(230, word.length * 32));
         mouthCloseTimer = setTimeout(() => {
           if (myToken !== speakToken || !isSpeaking) return;
           setViseme(/[.,;:!?]$/.test(word) ? 'idle' : 'mid');
@@ -579,28 +618,34 @@ export function attachCoachAvatar(app) {
         if (!started && synthSpeaking) {
           beginSpeaking();
         }
+
         if (started) {
           const elapsed = now - startAt;
-          if (elapsed > maxMs || (elapsed > 850 && !synthSpeaking)) {
+          if (!synthSpeaking) silentPolls++;
+          else silentPolls = 0;
+
+          if (elapsed > maxMs || (elapsed > 750 && silentPolls >= 3)) {
             finishSpeaking();
           }
-        } else if (now - queuedAt > 2600 && !synthSpeaking) {
+        } else if (now - queuedAt > 3500 && !synthSpeaking) {
           finishSpeaking();
         }
-      }, 120);
+      }, 150);
 
       try {
         window.speechSynthesis.speak(utter);
       } catch {
         finishSpeaking();
       }
-    }, 45);
+    }, 75);
   };
 
   const origSelectVoice = voice.selectVoiceByName.bind(voice);
   voice.selectVoiceByName = (name) => {
-    origSelectVoice(name);
-    const detected = detectVoiceGender(voice.voice);
+    const picked = getStrictSpanishVoices().find(v => v.name === name);
+    if (!picked) return;
+    origSelectVoice(picked.name);
+    const detected = detectVoiceGender(picked);
     if (detected === 'male' || detected === 'female') {
       activeGender = detected;
       try { localStorage.setItem(GENDER_PREF_KEY, activeGender); } catch { /* ignorar */ }
@@ -612,7 +657,7 @@ export function attachCoachAvatar(app) {
     activeGender = activeGender === 'female' ? 'male' : 'female';
     try { localStorage.setItem(GENDER_PREF_KEY, activeGender); } catch { /* ignorar */ }
 
-    const prof = resolveVoiceProfile(activeGender);
+    const prof = resolveSpanishVoiceProfile(activeGender);
     if (prof.voiceObj) {
       origSelectVoice(prof.voiceObj.name);
       const sel = document.getElementById('an-voice-select');
@@ -634,6 +679,7 @@ export function attachCoachAvatar(app) {
     el.id = id;
     el.className = `coach-dock-panel${isSpeaking ? ' speaking' : ''}`;
     el.dataset.mood = mood;
+    el.dataset.gender = activeGender;
     el.dataset.pose = meta.pose;
     el.dataset.gaze = meta.gaze;
     el.dataset.viseme = isSpeaking ? currentViseme : 'idle';
@@ -647,7 +693,7 @@ export function attachCoachAvatar(app) {
         <span class="coach-mood-pill">${meta.tag}</span>
         <button type="button" class="coach-swap-btn" title="Cambiar entre Maestro y Maestra">⇄ Voz</button>
       </div>
-      <div class="coach-stage">${renderCoachSvg(activeGender, mood)}</div>
+      <div class="coach-stage">${renderCoachSvg(activeGender, mood, id)}</div>
       <div class="coach-identity">
         <span class="coach-name">${coachName}</span>
         <div class="coach-wave-row">
@@ -664,6 +710,39 @@ export function attachCoachAvatar(app) {
 
     el.querySelector('.coach-swap-btn').addEventListener('click', swapAvatarAndVoice);
     return el;
+  };
+
+  // Actualiza en el sitio sin cortar animaciones si la emoción y género no cambiaron
+  const mountOrUpdateDock = (parentEl, spec) => {
+    const existing = document.getElementById(spec.id);
+    if (!existing) {
+      const panel = buildDockPanel(spec);
+      parentEl.prepend(panel);
+      return panel;
+    }
+
+    const meta = MOOD_META[spec.mood] || MOOD_META.teach;
+    const visualChanged = existing.dataset.mood !== spec.mood || existing.dataset.gender !== activeGender;
+    if (visualChanged) {
+      const panel = buildDockPanel(spec);
+      existing.replaceWith(panel);
+      return panel;
+    }
+
+    existing.dataset.titleText = spec.titleText || '';
+    existing.dataset.bodyText = spec.bodyText || '';
+    existing.dataset.bestText = spec.bestText || '';
+    existing.style.setProperty('--coach-aura', meta.color);
+
+    const bubble = existing.querySelector('.coach-bubble');
+    if (bubble) {
+      bubble.innerHTML = `
+        ${spec.titleText ? `<div class="coach-bubble-head">${spec.titleText}</div>` : ''}
+        <div class="coach-bubble-text">${spec.bodyText || ''}</div>
+        ${spec.bestText ? `<div class="coach-bubble-best">💡 ${spec.bestText}</div>` : ''}
+      `;
+    }
+    return existing;
   };
 
   const refreshAllDocks = () => {
@@ -723,10 +802,7 @@ export function attachCoachAvatar(app) {
     const wasOpen = document.body.classList.contains('review-coach-open');
     document.body.classList.add('review-coach-open');
 
-    const panel = buildDockPanel({ id: 'review-coach-dock', mood, titleText, bodyText, bestText });
-    const existing = document.getElementById('review-coach-dock');
-    if (existing) existing.replaceWith(panel);
-    else arena.prepend(panel);
+    mountOrUpdateDock(arena, { id: 'review-coach-dock', mood, titleText, bodyText, bestText });
 
     if (!wasOpen) requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
@@ -752,16 +828,13 @@ export function attachCoachAvatar(app) {
         ? lesson.summary
         : lesson.steps[stepIdx - 1].text;
 
-      const panel = buildDockPanel({
+      mountOrUpdateDock(layout, {
         id: 'academy-coach-dock',
         mood: 'teach',
         titleText,
         bodyText,
         bestText: ''
       });
-      const existing = document.getElementById('academy-coach-dock');
-      if (existing) existing.replaceWith(panel);
-      else layout.prepend(panel);
     };
 
     const origAcademy = app.academy._renderScaffold.bind(app.academy);
@@ -778,9 +851,10 @@ export function attachCoachAvatar(app) {
     };
   }
 
-  // Exponer motor del avatar para conectarlo en el Paso 4 (Laboratorio de Repertorio)
+  // Exponer motor del avatar para el Paso 4 (Laboratorio de Repertorio)
   app.coachAvatar = {
     buildDockPanel,
+    mountOrUpdateDock,
     refreshAllDocks,
     syncSpeakingUI,
     getGender: () => activeGender
