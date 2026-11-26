@@ -45,6 +45,14 @@ function ensureAvatarStyles() {
     }
     .tr-layout.tr-with-coach #ac-text { display: none !important; }
 
+    /* Paso 4: Cabina del entrenador en el Laboratorio de Repertorio */
+    .rep-with-coach {
+      display: grid !important;
+      grid-template-columns: 262px minmax(300px, 490px) minmax(240px, 1fr) !important;
+      align-items: start;
+      gap: 16px;
+    }
+
     .coach-dock-panel {
       display: flex; flex-direction: column; align-items: center; gap: 10px;
       background: linear-gradient(180deg, rgba(17, 25, 44, 0.96) 0%, rgba(8, 12, 22, 0.98) 100%);
@@ -142,7 +150,8 @@ function ensureAvatarStyles() {
 
     @media (max-width: 1140px) {
       body.review-coach-open main.arena:not(.hidden) { grid-template-columns: 1fr !important; max-width: 640px !important; }
-      .tr-layout.tr-with-coach { grid-template-columns: 1fr !important; }
+      .tr-layout.tr-with-coach,
+      .rep-with-coach { grid-template-columns: 1fr !important; }
       .coach-dock-panel { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px; }
       .coach-dock-top { flex: 1 1 100%; }
       .coach-stage { width: 118px; height: 108px; }
@@ -257,7 +266,6 @@ function renderCoachSvg(gender, mood, uid = 'ca') {
   const suitEdge = isF ? '#5c52b3' : '#2f4875';
   const iris = isF ? '#1e3a5f' : '#1e293b';
 
-  // Cejas por emoción
   let brows = `<path d="M62 49.5q5-2.8 10-.4M88 49.1q5-2.4 10 .4" stroke="#1b1620" stroke-width="2.5" fill="none" stroke-linecap="round"/>`;
   if (mood === 'blunder') {
     brows = `<path d="M61 52l11-4M99 52l-11-4" stroke="#1b1620" stroke-width="2.7" fill="none" stroke-linecap="round"/>`;
@@ -269,7 +277,6 @@ function renderCoachSvg(gender, mood, uid = 'ca') {
     brows = `<path d="M61 47.5q5.5-3.6 11-.8M88 46.7q5.5-2.8 11 .8" stroke="#1b1620" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
   }
 
-  // Boca en reposo según emoción
   let idleMouth = `<path d="M72.5 76q7.5 4.8 15 0" stroke="#7c2d12" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
   if (mood === 'blunder') {
     idleMouth = `<ellipse cx="80" cy="77.2" rx="4.4" ry="3.5" fill="#6b1d24" stroke="#9f3a3a" stroke-width="1"/>`;
@@ -292,7 +299,6 @@ function renderCoachSvg(gender, mood, uid = 'ca') {
        <path d="M64 32q15-5 29 2" stroke="${hairHi}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.65"/>
        <path d="M60 72c3 11 10 17 20 17s17-6 20-17c-4 6-11 9.5-20 9.5s-16-3.5-20-9.5z" fill="${hair}" opacity="0.56"/>`;
 
-  // Brazos y manos articuladas
   let armMarkup = '';
   if (pose === 'point') {
     armMarkup = `
@@ -380,7 +386,6 @@ function renderCoachSvg(gender, mood, uid = 'ca') {
           ${hairBack}
           <ellipse cx="56.5" cy="61" rx="4" ry="6" fill="${skinShade}"/>
           <ellipse cx="103.5" cy="61" rx="4" ry="6" fill="${skinShade}"/>
-          <!-- Rostro con mandíbula definida -->
           <path d="M57 58c0-15.5 10-25.5 23-25.5s23 10 23 25.5c0 14.5-8.5 28.5-23 29.5-14.5-1-23-15-23-29.5z" fill="url(#${g}-skin)"/>
           <ellipse cx="64.5" cy="67.5" rx="4.4" ry="2.1" fill="#fb7185" opacity="0.22"/>
           <ellipse cx="95.5" cy="67.5" rx="4.4" ry="2.1" fill="#fb7185" opacity="0.22"/>
@@ -404,7 +409,6 @@ function renderCoachSvg(gender, mood, uid = 'ca') {
 
           <path d="M80 60.5v7l-2.2 1.1" stroke="${skinShade}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 
-          <!-- 4 formas de boca sincronizadas -->
           <g class="ca-mouth-shape ca-m-idle">${idleMouth}</g>
           <g class="ca-mouth-shape ca-m-mid">
             <path d="M72.5 75.5q7.5 1.8 15 0c-1 4.2-4 6.2-7.5 6.2s-6.5-2-7.5-6.2z" fill="#7f1d1d" stroke="#5b1515" stroke-width="1"/>
@@ -482,7 +486,6 @@ export function attachCoachAvatar(app) {
     if (mouthCloseTimer) { clearTimeout(mouthCloseTimer); mouthCloseTimer = null; }
   };
 
-  // Selección estricta SOLO en español (nunca cae en voces inglesas)
   const resolveSpanishVoiceProfile = (targetGender) => {
     const fresh = getStrictSpanishVoices();
     if (fresh.length) cachedEsVoices = fresh;
@@ -563,7 +566,6 @@ export function attachCoachAvatar(app) {
         syncSpeakingUI(true);
         setViseme('mid');
 
-        // Pulso continuo: si onboundary deja de disparar a mitad de frase, la boca sigue viva hasta onend
         cadenceTimer = setInterval(() => {
           if (myToken !== speakToken || !isSpeaking) {
             if (cadenceTimer) { clearInterval(cadenceTimer); cadenceTimer = null; }
@@ -712,13 +714,12 @@ export function attachCoachAvatar(app) {
     return el;
   };
 
-  // Actualiza en el sitio sin cortar animaciones si la emoción y género no cambiaron
   const mountOrUpdateDock = (parentEl, spec) => {
     const existing = document.getElementById(spec.id);
     if (!existing) {
       const panel = buildDockPanel(spec);
       parentEl.prepend(panel);
-      return panel;
+      return { panel, created: true };
     }
 
     const meta = MOOD_META[spec.mood] || MOOD_META.teach;
@@ -726,8 +727,14 @@ export function attachCoachAvatar(app) {
     if (visualChanged) {
       const panel = buildDockPanel(spec);
       existing.replaceWith(panel);
-      return panel;
+      return { panel, created: false };
     }
+
+    const sameText =
+      (existing.dataset.titleText || '') === (spec.titleText || '') &&
+      (existing.dataset.bodyText || '') === (spec.bodyText || '') &&
+      (existing.dataset.bestText || '') === (spec.bestText || '');
+    if (sameText) return { panel: existing, created: false };
 
     existing.dataset.titleText = spec.titleText || '';
     existing.dataset.bodyText = spec.bodyText || '';
@@ -742,7 +749,7 @@ export function attachCoachAvatar(app) {
         ${spec.bestText ? `<div class="coach-bubble-best">💡 ${spec.bestText}</div>` : ''}
       `;
     }
-    return existing;
+    return { panel: existing, created: false };
   };
 
   const refreshAllDocks = () => {
@@ -763,6 +770,98 @@ export function attachCoachAvatar(app) {
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
 
+  // Paso 4: Integración en Laboratorio de Repertorio
+  let isSyncingRep = false;
+  let repRafId = null;
+
+  const inferRepertoireMood = (fbEl, fbText, isExam) => {
+    const low = String(fbText || '').toLowerCase();
+    const cls = fbEl ? fbEl.className : '';
+    if (/\berr\b/.test(cls) || /incorrect|falla|error|casi|prueba otra|no es la jugada/.test(low)) {
+      return 'mistake';
+    }
+    if (/\bok\b/.test(cls) || /completad|superad|dominad|maestr[ií]a|100%|🏆/.test(low)) {
+      return /completad|superad|dominad|100%|🏆/.test(low) ? 'brilliant' : 'best';
+    }
+    if (/excelente|perfecto|muy bien|correcto|bien hecho/.test(low)) {
+      return 'best';
+    }
+    return isExam ? 'teach' : 'book';
+  };
+
+  const syncRepertoireDock = () => {
+    repRafId = null;
+    if (isSyncingRep || app.shell?.currentView !== 'repertoire') return;
+
+    const root = app.shell?.viewRoot;
+    if (!root) return;
+    const grid = root.querySelector('.board-grid');
+    if (!grid) return;
+
+    const boardWrap = grid.closest('.tr-board-wrap, .rep-board-wrap') || grid.parentElement;
+    const layout = boardWrap?.parentElement;
+    if (!layout || layout === root) return;
+
+    const panel = Array.from(layout.children).find(
+      (ch) => ch !== boardWrap && ch.id !== 'repertoire-coach-dock'
+    );
+
+    const lineTitle = panel?.querySelector('h3')?.textContent?.trim() || 'Laboratorio de Repertorio';
+    const progressTxt = panel?.querySelector('.turn-pill, [id*="progress"], [class*="progress"]')?.textContent?.trim() || '';
+    const fbEl = panel?.querySelector('.tr-feedback, .rep-feedback, [class*="feedback"]');
+    const fbText = fbEl?.textContent?.trim() || '';
+    const descText = panel?.querySelector('p')?.textContent?.trim() || '';
+
+    const activeBtns = Array.from(panel?.querySelectorAll('button.active, button.btn-primary') || []);
+    const isExam = activeBtns.some((b) => /examen/i.test(b.textContent || ''));
+
+    const mood = inferRepertoireMood(fbEl, fbText, isExam);
+    const titleText = progressTxt ? `${lineTitle} · ${progressTxt}` : lineTitle;
+    const bodyText = fbText || descText || 'Sigue las jugadas teóricas en el tablero para dominar tu repertorio.';
+    const bestText = isExam && mood === 'teach' ? 'Modo Examen: ejecuta las jugadas de memoria' : '';
+
+    isSyncingRep = true;
+    try {
+      const hadClass = layout.classList.contains('rep-with-coach');
+      layout.classList.add('rep-with-coach');
+      const { created } = mountOrUpdateDock(layout, {
+        id: 'repertoire-coach-dock',
+        mood,
+        titleText,
+        bodyText,
+        bestText
+      });
+      if (!hadClass || created) {
+        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+      }
+    } finally {
+      isSyncingRep = false;
+    }
+  };
+
+  const scheduleRepSync = () => {
+    if (repRafId) return;
+    repRafId = requestAnimationFrame(syncRepertoireDock);
+  };
+
+  if (app.shell?.viewRoot && typeof MutationObserver !== 'undefined') {
+    const repObserver = new MutationObserver((mutations) => {
+      if (isSyncingRep || app.shell?.currentView !== 'repertoire') return;
+      const relevant = mutations.some((m) => {
+        const node = m.target?.nodeType === 1 ? m.target : m.target?.parentElement;
+        return node && !node.closest('#repertoire-coach-dock');
+      });
+      if (relevant) scheduleRepSync();
+    });
+    repObserver.observe(app.shell.viewRoot, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+
   if (app.shell?.navigate) {
     const origNav = app.shell.navigate.bind(app.shell);
     app.shell.navigate = (viewId) => {
@@ -770,7 +869,12 @@ export function attachCoachAvatar(app) {
         if (app.analyzer?.inReview) app.analyzer.exitReview();
         else closeReviewDock();
       }
-      return origNav(viewId);
+      const res = origNav(viewId);
+      if (viewId === 'repertoire') {
+        setTimeout(scheduleRepSync, 60);
+        setTimeout(scheduleRepSync, 240);
+      }
+      return res;
     };
   }
 
@@ -851,12 +955,12 @@ export function attachCoachAvatar(app) {
     };
   }
 
-  // Exponer motor del avatar para el Paso 4 (Laboratorio de Repertorio)
   app.coachAvatar = {
     buildDockPanel,
     mountOrUpdateDock,
     refreshAllDocks,
     syncSpeakingUI,
+    syncRepertoireDock,
     getGender: () => activeGender
   };
 }
