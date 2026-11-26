@@ -1,5 +1,3 @@
-import { FILES } from './engine.js';
-
 const SETUP_KEY = 'ajedrez960_game_setup_v1';
 
 const ELO_PRESETS = [
@@ -21,10 +19,22 @@ const CLOCK_PRESETS = [
   { id: '30+0',  label: '👑 30+0' }
 ];
 
+const PROMO_OPTIONS = [
+  { type: 'Q', name: 'Dama',    w: '♕', b: '♛' },
+  { type: 'R', name: 'Torre',   w: '♖', b: '♜' },
+  { type: 'B', name: 'Alfil',   w: '♗', b: '♝' },
+  { type: 'N', name: 'Caballo', w: '♘', b: '♞' }
+];
+
 const PIECE_VAL = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
 
 function getEloProfile(elo) {
   return ELO_PRESETS.find(p => p.elo === Number(elo)) || ELO_PRESETS[2];
+}
+
+function getNextEloProfile(elo) {
+  const cur = Number(elo) || 1200;
+  return ELO_PRESETS.find(p => p.elo > cur) || null;
 }
 
 function loadSavedSetup() {
@@ -66,11 +76,12 @@ function ensureSetupStyles() {
       padding: 18px 20px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
       display: flex; flex-direction: column; gap: 14px; color: var(--text-main);
     }
+    .gs-modal.gs-compact { max-width: 400px; }
     .gs-head {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
       border-bottom: 1px solid rgba(148, 163, 184, 0.16); padding-bottom: 10px;
     }
-    .gs-head h3 { margin: 0; font-size: 1.08rem; color: #f8fafc; }
+    .gs-head h3 { margin: 0; font-size: 1.06rem; color: #f8fafc; }
     .gs-close {
       background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border-color);
       color: var(--text-muted); width: 32px; height: 32px; border-radius: 9px;
@@ -128,6 +139,47 @@ function ensureSetupStyles() {
     .gs-ai-locked { pointer-events: none !important; }
     body.gs-challenge-mode .gs-aid-blocked {
       opacity: 0.35 !important; pointer-events: none !important; filter: grayscale(0.8);
+    }
+
+    /* Paso 2: Selector de coronación */
+    .gs-promo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .gs-promo-btn {
+      background: rgba(9, 13, 22, 0.85); border: 1.5px solid var(--border-color);
+      border-radius: 12px; padding: 10px 6px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      color: var(--text-main); transition: transform 0.12s, border-color 0.15s, background 0.15s;
+    }
+    .gs-promo-btn:hover {
+      border-color: var(--accent-cyan); background: rgba(56, 189, 248, 0.18); transform: translateY(-2px);
+    }
+    .gs-promo-icon { width: 48px; height: 48px; display: grid; place-items: center; font-size: 2rem; }
+    .gs-promo-icon svg { width: 44px; height: 44px; }
+    .gs-promo-btn span { font-size: 0.76rem; font-weight: 800; color: #f8fafc; }
+
+    /* Paso 2: Confirmación de seguridad */
+    .gs-confirm-desc { font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); margin: 0; }
+    .gs-danger-btn {
+      background: linear-gradient(135deg, #e11d48, #be123c) !important;
+      border-color: #fb7185 !important; color: #fff !important;
+    }
+
+    /* Paso 2: Tarjeta de Revancha Inteligente */
+    .gs-rematch-card {
+      background: linear-gradient(180deg, rgba(19, 28, 49, 0.96), rgba(9, 13, 22, 0.96));
+      border: 1.5px solid rgba(56, 189, 248, 0.45);
+      border-radius: 13px; padding: 12px; margin-bottom: 10px;
+      display: flex; flex-direction: column; gap: 8px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+    }
+    .gs-rematch-head {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    }
+    .gs-rematch-head strong { font-size: 0.88rem; color: #f8fafc; }
+    .gs-rematch-actions { display: flex; flex-direction: column; gap: 7px; }
+    .gs-rematch-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .gs-levelup-btn {
+      background: linear-gradient(135deg, #16a34a, #059669) !important;
+      border-color: #4ade80 !important; color: #fff !important;
     }
   `;
   document.head.appendChild(style);
@@ -193,7 +245,6 @@ function applyClockPreset(app, clockId) {
     }
   } catch { /* ignorar */ }
 
-  // Respaldo visual por selector de reloj si existe en la barra
   document.querySelectorAll('select').forEach(sel => {
     const opt = Array.from(sel.options).find(o => o.value === clockId || (clockId === 'none' && /sin reloj|off|none/i.test(`${o.value} ${o.textContent}`)));
     if (opt && sel.value !== opt.value) {
@@ -251,6 +302,38 @@ export function attachGameSetup(app) {
   let whiteAiElo = null;
   let blackSession = { active: false, elo: 1200, thinking: false, token: 0 };
   let undoInProgress = false;
+  let rematchSignature = '';
+
+  const isOnlineGameActive = () => {
+    const sel = findModeSelect();
+    const selVal = String(sel?.value || '').toLowerCase();
+    return Boolean(
+      selVal.includes('online') ||
+      app.online?.inMatch ||
+      app.matchmaking?.inMatch ||
+      app.online?.activeRoom
+    );
+  };
+
+  const isGameFinished = () => {
+    if (!app.engine) return false;
+    if (app.engine.status && app.engine.status !== 'playing') return true;
+    const slot = app.dom?.postgameSlot;
+    if (slot && (app.engine.history?.length || 0) >= 2 && !app.analyzer?.inReview && !app.analyzer?.analyzing) {
+      const txt = (slot.textContent || '').toLowerCase();
+      if (txt.includes('revisar') || txt.includes('analizar') || txt.includes('victoria') || txt.includes('derrota') || txt.includes('tablas') || txt.includes('rendic')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const isActiveHumanGameInProgress = () => {
+    if (app.shell?.currentView !== 'play') return false;
+    if (app.analyzer?.inReview || app.analyzer?.analyzing) return false;
+    if (!app.engine || isGameFinished()) return false;
+    return (app.engine.history?.length || 0) >= 4;
+  };
 
   // 1. Calibrar fuerza real de Stockfish según el ELO elegido (solo en partidas vs IA)
   if (app.stockfish?.evaluatePosition && !app.stockfish._gsWrapped) {
@@ -297,9 +380,11 @@ export function attachGameSetup(app) {
     blackSession.token++;
     whiteAiElo = null;
     activeMatch = null;
+    rematchSignature = '';
     document.body.classList.remove('gs-challenge-mode');
     document.querySelector('main.arena .board-grid')?.classList.remove('gs-ai-locked');
     document.getElementById('gs-active-banner')?.remove();
+    document.getElementById('gs-rematch-card')?.remove();
   };
 
   const renderActiveBanner = () => {
@@ -329,6 +414,192 @@ export function attachGameSetup(app) {
     });
   };
 
+  // Paso 2C: Tarjeta de Revancha Inteligente al terminar partida
+  const syncRematchCard = () => {
+    const existing = document.getElementById('gs-rematch-card');
+    const shouldShow =
+      app.shell?.currentView === 'play' &&
+      !app.analyzer?.inReview &&
+      !app.analyzer?.analyzing &&
+      !isOnlineGameActive() &&
+      isGameFinished();
+
+    if (!shouldShow) {
+      if (existing) existing.remove();
+      rematchSignature = '';
+      return;
+    }
+
+    const sig = `${app.engine.positionId}_${app.engine.history?.length || 0}_${app.engine.status}_${app.engine.winner || 'n'}`;
+    if (existing && rematchSignature === sig) return;
+    rematchSignature = sig;
+
+    const sidePanel = document.querySelector('main.arena .side-panel');
+    if (!sidePanel) return;
+
+    const variant = activeMatch?.variant || (app.engine.positionId === 518 ? 'classic' : 'fischer960');
+    const curColor = activeMatch?.resolvedColor || (app.flipped ? 'b' : 'w');
+    const nextColor = curColor === 'w' ? 'b' : 'w';
+    const curElo = activeMatch?.elo || savedCfg.elo || 1200;
+    const nextEloProf = getNextEloProfile(curElo);
+
+    const winner = app.engine.winner;
+    const humanWon = Boolean(winner && winner === curColor);
+    const headline = humanWon
+      ? '🏆 ¡Victoria! ¿Subimos el desafío?'
+      : (winner && winner !== curColor)
+        ? '⚔️ Partida terminada · ¿Revancha?'
+        : '🤝 Partida finalizada · ¿Otra ronda?';
+
+    const card = existing || document.createElement('div');
+    card.id = 'gs-rematch-card';
+    card.className = 'gs-rematch-card';
+    card.innerHTML = `
+      <div class="gs-rematch-head">
+        <strong>${headline}</strong>
+        <span class="mode-card-tag">${variant === 'fischer960' ? '960' : 'CLÁSICO'}</span>
+      </div>
+      <div class="gs-rematch-actions">
+        <button type="button" class="btn btn-primary" id="gs-rematch-swap" style="width:100%">
+          🔄 Revancha con ${nextColor === 'b' ? '♚ Negras' : '♔ Blancas'}
+        </button>
+        <div class="gs-rematch-row">
+          ${nextEloProf ? `
+            <button type="button" class="btn ${humanWon ? 'gs-levelup-btn' : 'btn-secondary'}" id="gs-rematch-up">
+              ⬆ Subir a ${nextEloProf.label}
+            </button>
+          ` : `
+            <button type="button" class="btn btn-secondary" id="gs-rematch-same">
+              🔁 Repetir Máximo
+            </button>
+          `}
+          <button type="button" class="btn btn-ghost" id="gs-rematch-cfg">
+            ⚙ Configurar
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (!existing) {
+      const banner = document.getElementById('gs-active-banner');
+      if (banner) banner.insertAdjacentElement('afterend', card);
+      else sidePanel.prepend(card);
+    }
+
+    const baseCfg = {
+      ...savedCfg,
+      elo: curElo,
+      clock: activeMatch?.clock || savedCfg.clock,
+      mode: activeMatch?.mode || savedCfg.mode
+    };
+
+    card.querySelector('#gs-rematch-swap')?.addEventListener('click', () => {
+      launchConfiguredGame(variant, { ...baseCfg, color: nextColor });
+    });
+    card.querySelector('#gs-rematch-up')?.addEventListener('click', () => {
+      if (nextEloProf) {
+        launchConfiguredGame(variant, { ...baseCfg, elo: nextEloProf.elo, color: curColor });
+      }
+    });
+    card.querySelector('#gs-rematch-same')?.addEventListener('click', () => {
+      launchConfiguredGame(variant, { ...baseCfg, color: curColor });
+    });
+    card.querySelector('#gs-rematch-cfg')?.addEventListener('click', () => {
+      openSetupModal(variant);
+    });
+  };
+
+  // Paso 2A: Modal completo de coronación (Dama / Torre / Alfil / Caballo)
+  const openPromotionModal = (color, onPick) => {
+    document.getElementById('gs-promo-backdrop')?.remove();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'gs-promo-backdrop';
+    backdrop.className = 'gs-backdrop';
+
+    const renderPieceIcon = (type) => {
+      try {
+        if (typeof app.pieceRenderer === 'function') {
+          return app.pieceRenderer(type, color);
+        }
+      } catch { /* usar símbolo */ }
+      const item = PROMO_OPTIONS.find(p => p.type === type);
+      return item ? item[color] : '♕';
+    };
+
+    backdrop.innerHTML = `
+      <div class="gs-modal gs-compact" role="dialog" aria-modal="true">
+        <div class="gs-head">
+          <div>
+            <span class="mode-card-tag">👑 CORONACIÓN DE PEÓN</span>
+            <h3>Elige tu nueva pieza</h3>
+          </div>
+          <button type="button" class="gs-close" id="gs-promo-cancel" title="Cancelar">✕</button>
+        </div>
+        <div class="gs-promo-grid">
+          ${PROMO_OPTIONS.map(p => `
+            <button type="button" class="gs-promo-btn" data-gs-promo="${p.type}">
+              <div class="gs-promo-icon">${renderPieceIcon(p.type)}</div>
+              <span>${p.name}</span>
+            </button>
+          `).join('')}
+        </div>
+        <button type="button" class="btn btn-ghost" id="gs-promo-back" style="width:100%">
+          Cancelar jugada
+        </button>
+      </div>
+    `;
+
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#gs-promo-cancel')?.addEventListener('click', close);
+    backdrop.querySelector('#gs-promo-back')?.addEventListener('click', close);
+    backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); });
+
+    backdrop.querySelectorAll('[data-gs-promo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const chosen = btn.dataset.gsPromo;
+        close();
+        onPick(chosen);
+      });
+    });
+
+    document.body.appendChild(backdrop);
+  };
+
+  // Paso 2B: Modal de confirmación rápida
+  const openConfirmModal = ({ tag, title, desc, confirmLabel, danger = true, onConfirm }) => {
+    document.getElementById('gs-confirm-backdrop')?.remove();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'gs-confirm-backdrop';
+    backdrop.className = 'gs-backdrop';
+    backdrop.innerHTML = `
+      <div class="gs-modal gs-compact" role="dialog" aria-modal="true">
+        <div class="gs-head">
+          <div>
+            <span class="mode-card-tag">${tag}</span>
+            <h3>${title}</h3>
+          </div>
+          <button type="button" class="gs-close" id="gs-cf-x" title="Cerrar">✕</button>
+        </div>
+        <p class="gs-confirm-desc">${desc}</p>
+        <div class="gs-row-2">
+          <button type="button" class="btn btn-secondary" id="gs-cf-cancel">Seguir jugando</button>
+          <button type="button" class="btn ${danger ? 'gs-danger-btn' : 'btn-primary'}" id="gs-cf-ok">${confirmLabel}</button>
+        </div>
+      </div>
+    `;
+
+    const close = () => backdrop.remove();
+    backdrop.querySelector('#gs-cf-x')?.addEventListener('click', close);
+    backdrop.querySelector('#gs-cf-cancel')?.addEventListener('click', close);
+    backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); });
+    backdrop.querySelector('#gs-cf-ok')?.addEventListener('click', () => {
+      close();
+      onConfirm();
+    });
+
+    document.body.appendChild(backdrop);
+  };
+
   const getBoardSquareEl = (r, c) => {
     const grid = document.querySelector('main.arena .board-grid');
     if (!grid) return null;
@@ -337,6 +608,18 @@ export function attachGameSetup(app) {
     const vr = app.flipped ? 7 - r : r;
     const vc = app.flipped ? 7 - c : c;
     return squares[vr * 8 + vc] || null;
+  };
+
+  const squareElToCoords = (grid, sqEl) => {
+    const squares = Array.from(grid.querySelectorAll('.square'));
+    const idx = squares.indexOf(sqEl);
+    if (idx < 0 || squares.length !== 64) return null;
+    const vr = Math.floor(idx / 8);
+    const vc = idx % 8;
+    return {
+      r: app.flipped ? 7 - vr : vr,
+      c: app.flipped ? 7 - vc : vc
+    };
   };
 
   const executeWhiteMoveByClick = (move, token) => {
@@ -364,7 +647,6 @@ export function attachGameSetup(app) {
 
       if (toSq) toSq.click();
 
-      // Si se abre selector de coronación, elegir automáticamente la pieza
       setTimeout(() => {
         if (token !== blackSession.token || !blackSession.active) return;
         const wantPromo = (move.promo || 'Q').toUpperCase();
@@ -428,7 +710,6 @@ export function attachGameSetup(app) {
 
     setTimeout(() => {
       if (token !== blackSession.token) return;
-      // Si el clic no alcanzó a aplicarse (por animación previa), reintentar suavemente
       if (app.engine?.status === 'playing' && app.engine?.turn === 'w' && app.engine.history.length === prevLen) {
         blackSession.thinking = false;
         return;
@@ -439,14 +720,174 @@ export function attachGameSetup(app) {
     }, 480);
   };
 
-  // Vigilante liviano para que Stockfish responda con Blancas cuando juegas con Negras
+  // Vigilante liviano: turno de Stockfish con Blancas + tarjeta de Revancha Inteligente
   setInterval(() => {
+    syncRematchCard();
     if (!blackSession.active) return;
     if (app.shell?.currentView !== 'play' || app.analyzer?.inReview || app.analyzer?.analyzing) return;
     if (app.engine?.status === 'playing' && app.engine?.turn === 'w' && !blackSession.thinking && !undoInProgress) {
       runBlackSessionAiTurn();
     }
   }, 320);
+
+  // Interceptor unificado en fase de captura: Coronación + Confirmaciones + Tarjetas de Inicio
+  document.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
+    if (e.target.closest('.gs-backdrop')) return;
+
+    // A) Selector de coronación completo (Dama / Torre / Alfil / Caballo)
+    if (
+      app.shell?.currentView === 'play' &&
+      !app.analyzer?.inReview &&
+      !app.analyzer?.analyzing &&
+      app.engine?.status === 'playing'
+    ) {
+      const grid = document.querySelector('main.arena .board-grid');
+      const toSq = grid && e.target.closest('.square');
+      if (grid && toSq && grid.contains(toSq)) {
+        const fromSq = grid.querySelector('.square.selected');
+        if (fromSq && fromSq !== toSq) {
+          const from = squareElToCoords(grid, fromSq);
+          const to = squareElToCoords(grid, toSq);
+          if (from && to) {
+            const piece = app.engine.board?.[from.r]?.[from.c];
+            const isPromoRank = piece && piece.type === 'P' && piece.color === app.engine.turn &&
+              ((piece.color === 'w' && to.r === 0) || (piece.color === 'b' && to.r === 7));
+            if (isPromoRank) {
+              const promoMoves = app.engine.getLegalMovesFrom(from.r, from.c)
+                .filter(m => m.to.r === to.r && m.to.c === to.c && m.promo);
+              if (promoMoves.length > 1) {
+                e.preventDefault();
+                e.stopPropagation();
+                openPromotionModal(piece.color, (chosenType) => {
+                  const eng = app.engine;
+                  if (!eng) return;
+                  const hadOwn = Object.prototype.hasOwnProperty.call(eng, 'makeMove');
+                  const prevMake = eng.makeMove;
+                  const restore = () => {
+                    if (eng.makeMove === patchedMake) {
+                      if (hadOwn) eng.makeMove = prevMake;
+                      else delete eng.makeMove;
+                    }
+                  };
+                  const patchedMake = function (mv) {
+                    restore();
+                    if (mv && mv.promo) mv.promo = chosenType;
+                    return prevMake.call(this, mv);
+                  };
+                  eng.makeMove = patchedMake;
+                  setTimeout(restore, 700);
+
+                  toSq.click();
+
+                  // Si el juego base también abre su propio selector de coronación, seleccionarlo automáticamente
+                  setTimeout(() => {
+                    const nativeBtn = document.querySelector(
+                      `[data-promo="${chosenType}"], [data-piece="${chosenType}"]`
+                    );
+                    if (nativeBtn && !nativeBtn.closest('.gs-backdrop') && nativeBtn.offsetParent !== null) {
+                      nativeBtn.click();
+                    }
+                  }, 50);
+                });
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // B) Confirmación de seguridad en partida activa (>= 2 jugadas completas)
+    if (isActiveHumanGameInProgress()) {
+      const btn = e.target.closest('button, .dt-sb-brand');
+      if (btn && !btn.closest('#gs-active-banner, #gs-rematch-card')) {
+        const txt = (btn.textContent || '').trim().toLowerCase();
+
+        // 1. Rendirse
+        if (btn.closest('main.arena') && txt.includes('rendirse')) {
+          e.preventDefault();
+          e.stopPropagation();
+          openConfirmModal({
+            tag: '⚠ CONFIRMAR RENDICIÓN',
+            title: '¿Rendirse en esta partida?',
+            desc: 'La partida finalizará como derrota y podrás revisarla con Stockfish de inmediato.',
+            confirmLabel: 'Sí, rendirme',
+            danger: true,
+            onConfirm: () => btn.click()
+          });
+          return;
+        }
+
+        // 2. Nueva partida / Nueva 960 en barra superior
+        if (btn.closest('header, .topbar, .app-header') && (txt.includes('nueva 960') || txt.includes('nueva partida'))) {
+          e.preventDefault();
+          e.stopPropagation();
+          openConfirmModal({
+            tag: '⚠ PARTIDA EN CURSO',
+            title: '¿Iniciar una nueva partida?',
+            desc: 'Se reiniciará el tablero actual y perderás el avance de las jugadas en curso.',
+            confirmLabel: 'Sí, reiniciar',
+            danger: true,
+            onConfirm: () => btn.click()
+          });
+          return;
+        }
+
+        // 3. Salir del tablero hacia otra sección
+        const isSidebarExit = btn.classList.contains('dt-sb-brand') ||
+          btn.classList.contains('dt-sb-profile') ||
+          (btn.classList.contains('dt-sb-item') && btn.dataset.dtNav && btn.dataset.dtNav !== 'play');
+        const isDrawerExit = btn.classList.contains('drawer-item') && btn.dataset.nav && btn.dataset.nav !== 'play';
+        const isTopHomeExit = Boolean(btn.closest('header, .topbar, .app-header') && txt.includes('inicio'));
+
+        if (isSidebarExit || isDrawerExit || isTopHomeExit) {
+          e.preventDefault();
+          e.stopPropagation();
+          openConfirmModal({
+            tag: '♟ PARTIDA EN CURSO',
+            title: '¿Salir del tablero actual?',
+            desc: 'Tienes una partida activa. Si hay reloj corriendo podría seguir descontando tiempo mientras estés fuera.',
+            confirmLabel: 'Sí, salir',
+            danger: false,
+            onConfirm: () => btn.click()
+          });
+          return;
+        }
+      }
+    }
+
+    // C) Interceptar tarjetas de Ajedrez Clásico y Fischer 960 en Inicio
+    if (app.shell?.currentView !== 'home') return;
+    const viewRoot = app.shell?.viewRoot;
+    if (!viewRoot || !viewRoot.contains(e.target)) return;
+    if (e.target.closest('.mm-card, .dp-grid, .dp-card')) return;
+
+    let node = e.target;
+    let targetCard = null;
+    while (node && node !== viewRoot) {
+      const txt = node.textContent || '';
+      if (txt.length < 360 && (txt.includes('Jugar Clásico') || txt.includes('Jugar Fischer 960') || txt.includes('Jugar Frente a Frente') || txt.includes('Abrir Sala Privada'))) {
+        targetCard = node;
+        break;
+      }
+      node = node.parentElement;
+    }
+    if (!targetCard) return;
+
+    const text = targetCard.textContent || '';
+    if (text.includes('Jugar Clásico')) {
+      e.preventDefault();
+      e.stopPropagation();
+      openSetupModal('classic');
+    } else if (text.includes('Jugar Fischer 960')) {
+      e.preventDefault();
+      e.stopPropagation();
+      openSetupModal('fischer960');
+    } else if (text.includes('Jugar Frente a Frente') || text.includes('Abrir Sala Privada')) {
+      clearSessions();
+    }
+  }, true);
 
   // Manejar Deshacer doble cuando juegas con Negras (para volver a tu turno)
   document.addEventListener('click', (e) => {
@@ -486,6 +927,8 @@ export function attachGameSetup(app) {
 
     blackSession.token++;
     blackSession.thinking = false;
+    rematchSignature = '';
+    document.getElementById('gs-rematch-card')?.remove();
 
     const sel = findModeSelect();
     app.shell.navigate('play');
@@ -525,7 +968,6 @@ export function attachGameSetup(app) {
     activeMatch = { variant, resolvedColor, elo: cfg.elo, clock: cfg.clock, mode: cfg.mode, posId };
 
     setTimeout(() => {
-      // Alinear orientación del tablero según el color elegido
       const wantFlipped = resolvedColor === 'b';
       if (Boolean(app.flipped) !== wantFlipped) {
         const flipBtn = findArenaButton('voltear');
@@ -680,45 +1122,14 @@ export function attachGameSetup(app) {
     document.body.appendChild(backdrop);
   };
 
-  // Interceptar las tarjetas de Ajedrez Clásico y Fischer 960 en Pantalla de Inicio
-  document.addEventListener('click', (e) => {
-    if (app.shell?.currentView !== 'home') return;
-    const viewRoot = app.shell?.viewRoot;
-    if (!viewRoot || !viewRoot.contains(e.target)) return;
-    if (e.target.closest('.mm-card, .dp-grid, .dp-card, .gs-backdrop')) return;
-
-    let node = e.target;
-    let targetCard = null;
-    while (node && node !== viewRoot) {
-      const txt = node.textContent || '';
-      if (txt.length < 360 && (txt.includes('Jugar Clásico') || txt.includes('Jugar Fischer 960') || txt.includes('Jugar Frente a Frente') || txt.includes('Abrir Sala Privada'))) {
-        targetCard = node;
-        break;
-      }
-      node = node.parentElement;
-    }
-    if (!targetCard) return;
-
-    const text = targetCard.textContent || '';
-    if (text.includes('Jugar Clásico')) {
-      e.preventDefault();
-      e.stopPropagation();
-      openSetupModal('classic');
-    } else if (text.includes('Jugar Fischer 960')) {
-      e.preventDefault();
-      e.stopPropagation();
-      openSetupModal('fischer960');
-    } else if (text.includes('Jugar Frente a Frente') || text.includes('Abrir Sala Privada')) {
-      clearSessions();
-    }
-  }, true);
-
-  // Actualizar banner al volver al tablero o salir de revisión
   if (app.shell?.navigate) {
     const origNav = app.shell.navigate.bind(app.shell);
     app.shell.navigate = (viewId) => {
       const res = origNav(viewId);
-      setTimeout(renderActiveBanner, 60);
+      setTimeout(() => {
+        renderActiveBanner();
+        syncRematchCard();
+      }, 60);
       return res;
     };
   }
