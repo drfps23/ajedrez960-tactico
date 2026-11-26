@@ -1,6 +1,7 @@
 import { PUZZLES } from './data/puzzles_data.js';
 import { Chess960Engine, FILES } from './engine.js';
 import { detectOpening } from './openings.js';
+import { attachGameSetup } from './game_setup.js';
 
 const FLAG_KEY = 'ajedrez960_flag_v1';
 const PACE_KEY = 'ajedrez960_pace_ratings_v1';
@@ -311,6 +312,13 @@ function ensureProStyles() {
 export function attachDashboardPro(app) {
   ensureProStyles();
 
+  // Conectar selector previo de partida (Paso 1)
+  try {
+    attachGameSetup(app);
+  } catch (err) {
+    console.error('[GameSetup]', err);
+  }
+
   let dailyPuzzle = getLocalDailyPuzzle();
   let triggerSidebarSync = () => {};
 
@@ -518,7 +526,7 @@ export function attachDashboardPro(app) {
       });
       section.querySelector('#dp-last-btn')?.addEventListener('click', () => {
         if (lastGame) app.historyVault?.openSavedForAnalysis?.(lastGame);
-        else app.shell.navigate('play');
+        else app.gameSetup?.openSetupModal?.('classic');
       });
       section.querySelector('#dp-stats-btn')?.addEventListener('click', () => app.shell.navigate('profile'));
     };
