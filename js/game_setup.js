@@ -182,11 +182,16 @@ function ensureSetupStyles() {
   document.head.appendChild(style);
 }
 
+function getArenaGrid() {
+  return document.querySelector('main.arena .board-grid, main.arena #board-grid, main.arena #board, main.arena .chess-board');
+}
+
 function findModeSelect() {
-  const selects = document.querySelectorAll('header select, .topbar select, main.arena select, select');
+  const selects = document.querySelectorAll('header select, .topbar select, .app-header select, main.arena select, select');
   for (const sel of selects) {
+    if (sel.id === 'an-voice-select' || /voice|voz/i.test(`${sel.id} ${sel.name} ${sel.className}`)) continue;
     const hasAi = Array.from(sel.options).some(o =>
-      /ai|ia|stockfish/i.test(`${o.value} ${o.textContent}`)
+      /\b(ai|ia|stockfish)\b|^ai[-_]/i.test(`${o.value} ${o.textContent}`)
     );
     if (hasAi) return sel;
   }
@@ -208,7 +213,7 @@ function findBestAiOptionValue(sel, targetElo) {
   const eloOpts = Array.from(sel.options)
     .map(o => {
       const m = `${o.value} ${o.textContent}`.match(/(\d{3,4})/);
-      return m && /ai|ia|stockfish/i.test(`${o.value} ${o.textContent}`)
+      return m && /\b(ai|ia|stockfish)\b|^ai[-_]/i.test(`${o.value} ${o.textContent}`)
         ? { value: o.value, elo: parseInt(m[1], 10) }
         : null;
     })
@@ -219,7 +224,7 @@ function findBestAiOptionValue(sel, targetElo) {
     return eloOpts[0].value;
   }
 
-  const anyAi = findMatchingOption(sel, (v, t) => v.includes('ai') || t.includes('ia') || t.includes('stockfish'));
+  const anyAi = findMatchingOption(sel, (v, t) => /\b(ai|ia|stockfish)\b|^ai[-_]/i.test(`${v} ${t}`));
   return anyAi ? anyAi.value : 'ai-elo-1200';
 }
 
@@ -230,7 +235,7 @@ function findLocalModeValue(sel) {
   );
   if (explicit) return explicit.value;
   const nonAi = findMatchingOption(sel, (v, t) =>
-    !/ai|ia|stockfish|bot|elo|online|global|sala|red/i.test(`${v} ${t}`)
+    !/\b(ai|ia|stockfish|bot|elo|online|global|sala|red)\b|^ai[-_]/i.test(`${v} ${t}`)
   );
   if (nonAi) return nonAi.value;
   return 'pvp';
@@ -249,6 +254,7 @@ function applyClockPreset(app, clockId) {
   } catch { /* ignorar */ }
 
   document.querySelectorAll('select').forEach(sel => {
+    if (sel.id === 'an-voice-select') return;
     const opt = Array.from(sel.options).find(o => o.value === clockId || (clockId === 'none' && /sin reloj|off|none/i.test(`${o.value} ${o.textContent}`)));
     if (opt && sel.value !== opt.value) {
       sel.value = opt.value;
@@ -271,11 +277,24 @@ function findArenaButton(keyword) {
 }
 
 function isBoardFlipped(app) {
-  const grid = document.querySelector('main.arena .board-grid');
+  const grid = getArenaGrid();
   if (grid) {
-    const firstRank = grid.querySelector('.square .coord-rank');
-    if (firstRank) {
-      const txt = (firstRank.textContent || '').trim();
+    const squares = Array.from(grid.querySelectorAll('.square'));
+    let topLeft = null;
+    let bestScore = Infinity;
+    for (const sq of squares) {
+      const rankEl = sq.querySelector('.coord-rank');
+      if (!rankEl) continue;
+      const r = sq.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      const score = r.top * 10 + r.left;
+      if (score < bestScore) {
+        bestScore = score;
+        topLeft = rankEl;
+      }
+    }
+    if (topLeft) {
+      const txt = (topLeft.textContent || '').trim();
       if (txt === '1') return true;
       if (txt === '8') return false;
     }
@@ -326,6 +345,7 @@ export function attachGameSetup(app) {
   let blackSession = { active: false, elo: 1200, thinking: false, token: 0 };
   let undoInProgress = false;
   let rematchSignature = '';
+  let lastRematchAt = 0;
 
   const isOnlineGameActive = () => {
     const sel = findModeSelect();
@@ -341,10 +361,12 @@ export function attachGameSetup(app) {
   const isGameFinished = () => {
     if (!app.engine) return false;
     if (app.engine.status && app.engine.status !== 'playing') return true;
+    if (app.gameOver || app.isGameOver) return true;
     const slot = app.dom?.postgameSlot;
-    if (slot && (app.engine.history?.length || 0) >= 2 && !app.analyzer?.inReview && !app.analyzer?.analyzing) {
+    if (slot && !app.analyzer?.inReview && !app.analyzer?.analyzing) {
+      const hasPostBtn = Boolean(slot.querySelector('button'));
       const txt = (slot.textContent || '').toLowerCase();
-      if (txt.includes('revisar') || txt.includes('analizar') || txt.includes('victoria') || txt.includes('derrota') || txt.includes('tablas') || txt.includes('rendic')) {
+      if (hasPostBtn || /revisar|analizar|victoria|derrota|tablas|rendi|mate|revancha|ganan|tiempo agotado/.test(txt)) {
         return true;
       }
     }
@@ -405,7 +427,7 @@ export function attachGameSetup(app) {
     activeMatch = null;
     rematchSignature = '';
     document.body.classList.remove('gs-challenge-mode');
-    document.querySelector('main.arena .board-grid')?.classList.remove('gs-ai-locked');
+    getArenaGrid()?.classList.remove('gs-ai-locked');
     document.getElementById('gs-active-banner')?.remove();
     document.getElementById('gs-rematch-card')?.remove();
   };
@@ -422,7 +444,7 @@ export function attachGameSetup(app) {
     const prof = getEloProfile(activeMatch.elo);
     const colorTxt = activeMatch.resolvedColor === 'b' ? '♚ Negras' : '♔ Blancas';
     const modeTxt = activeMatch.mode === 'challenge' ? '🔥 Reto' : '🎓 Práctica';
-    const statusTxt = blackSession.thinking ? ' · Pensando...' : '';
+    const statusTxt = blackSession.thinking ? ' · Stockfish moviendo...' : '';
 
     const el = existing || document.createElement('div');
     el.id = 'gs-active-banner';
@@ -437,23 +459,44 @@ export function attachGameSetup(app) {
     });
   };
 
-  const ensureBoardOrientation = (wantFlipped) => {
+  const forceBoardOrientation = (wantFlipped) => {
     if (isBoardFlipped(app) === wantFlipped) return;
+
     const flipBtn = findArenaButton('voltear');
     if (flipBtn) {
       flipBtn.click();
     }
+
     if (isBoardFlipped(app) !== wantFlipped) {
       app.flipped = wantFlipped;
-      app.renderBoard?.();
+      if (typeof app.renderBoard === 'function') app.renderBoard();
+      else if (typeof app.render === 'function') app.render();
+      else if (typeof app._renderBoard === 'function') app._renderBoard();
     }
   };
 
+  const dismissNativeEndModals = () => {
+    document.querySelectorAll('.modal-backdrop, .overlay, .gameover-modal, [role="dialog"]').forEach(el => {
+      if (el.closest('.gs-backdrop')) return;
+      const txt = (el.textContent || '').toLowerCase();
+      if (/revancha|victoria|derrota|jaque mate|tablas|partida terminada|rendi/.test(txt)) {
+        el.classList.add('hidden');
+        if (el.style) el.style.display = 'none';
+      }
+    });
+  };
+
   const triggerInvertedRematch = () => {
+    const now = Date.now();
+    if (now - lastRematchAt < 650) return;
+    lastRematchAt = now;
+
     const variant = activeMatch?.variant || (app.engine?.positionId === 518 ? 'classic' : 'fischer960');
     const curColor = activeMatch?.resolvedColor || (isBoardFlipped(app) ? 'b' : 'w');
     const nextColor = curColor === 'w' ? 'b' : 'w';
     const curElo = activeMatch?.elo || savedCfg.elo || 1200;
+
+    dismissNativeEndModals();
 
     launchConfiguredGame(
       variant,
@@ -484,7 +527,7 @@ export function attachGameSetup(app) {
       return;
     }
 
-    const sig = `${app.engine.positionId}_${app.engine.history?.length || 0}_${app.engine.status}_${app.engine.winner || 'n'}_${activeMatch?.resolvedColor || 'x'}`;
+    const sig = `${app.engine.positionId}_${app.engine.history?.length || 0}_${app.engine.status}_${app.engine.winner || 'n'}_${activeMatch?.resolvedColor || (isBoardFlipped(app) ? 'b' : 'w')}`;
     if (existing && rematchSignature === sig) return;
     rematchSignature = sig;
 
@@ -655,7 +698,7 @@ export function attachGameSetup(app) {
   };
 
   const getBoardSquareEl = (r, c) => {
-    const grid = document.querySelector('main.arena .board-grid');
+    const grid = getArenaGrid();
     if (!grid) return null;
     const squares = grid.querySelectorAll('.square');
     if (squares.length !== 64) return null;
@@ -679,7 +722,7 @@ export function attachGameSetup(app) {
   };
 
   const executeWhiteMoveByClick = (move, token) => {
-    const grid = document.querySelector('main.arena .board-grid');
+    const grid = getArenaGrid();
     if (!grid || !move) return false;
 
     const fromSq = getBoardSquareEl(move.from.r, move.from.c);
@@ -725,7 +768,7 @@ export function attachGameSetup(app) {
     if (!app.engine || app.engine.status !== 'playing' || app.engine.turn !== 'w') return;
 
     const token = blackSession.token;
-    const grid = document.querySelector('main.arena .board-grid');
+    const grid = getArenaGrid();
     blackSession.thinking = true;
     grid?.classList.add('gs-ai-locked');
     renderActiveBanner();
@@ -761,18 +804,14 @@ export function attachGameSetup(app) {
       return;
     }
 
-    const prevLen = app.engine.history.length;
-    const okClick = executeWhiteMoveByClick(chosenMove, token);
+    executeWhiteMoveByClick(chosenMove, token);
 
     setTimeout(() => {
       if (token !== blackSession.token) return;
       blackSession.thinking = false;
       grid?.classList.remove('gs-ai-locked');
       renderActiveBanner();
-      if (!okClick || (app.engine?.status === 'playing' && app.engine?.turn === 'w' && app.engine.history.length === prevLen)) {
-        // Reintento limpio en el siguiente ciclo del vigilante
-      }
-    }, 500);
+    }, 520);
   };
 
   // Vigilante liviano: turno de Stockfish con Blancas + tarjeta de Revancha Inteligente
@@ -797,26 +836,22 @@ export function attachGameSetup(app) {
       !app.analyzer?.inReview &&
       app.engine?.status === 'playing' &&
       app.engine?.turn === 'w' &&
-      e.target.closest('main.arena .board-grid')
+      e.target.closest('main.arena .board-grid, main.arena #board-grid, main.arena #board')
     ) {
       e.preventDefault();
       e.stopPropagation();
       return;
     }
 
-    // 1) Interceptar botón nativo de "Revancha" al terminar partida para que también invierta colores
-    if (
-      app.shell?.currentView === 'play' &&
-      !app.analyzer?.inReview &&
-      !isOnlineGameActive() &&
-      isGameFinished()
-    ) {
-      const revBtn = e.target.closest('main.arena button');
-      if (revBtn && !revBtn.closest('#gs-rematch-card, #gs-active-banner')) {
-        const txt = (revBtn.textContent || '').toLowerCase();
-        if (txt.includes('revancha')) {
+    // 1) Interceptar CUALQUIER botón nativo de "Revancha / Jugar de nuevo / Otra partida"
+    if (app.shell?.currentView === 'play' && !isOnlineGameActive()) {
+      const revBtn = e.target.closest('button');
+      if (revBtn && !revBtn.closest('#gs-rematch-card, #gs-active-banner, #dt-sidebar, .drawer-panel')) {
+        const txt = (revBtn.textContent || '').trim().toLowerCase();
+        if (/revancha|jugar de nuevo|otra partida|volver a jugar/.test(txt)) {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           triggerInvertedRematch();
           return;
         }
@@ -830,7 +865,7 @@ export function attachGameSetup(app) {
       !app.analyzer?.analyzing &&
       app.engine?.status === 'playing'
     ) {
-      const grid = document.querySelector('main.arena .board-grid');
+      const grid = getArenaGrid();
       const toSq = grid && e.target.closest('.square');
       if (grid && toSq && grid.contains(toSq)) {
         const fromSq = grid.querySelector('.square.selected');
@@ -1064,17 +1099,19 @@ export function attachGameSetup(app) {
     const wantFlipped = resolvedColor === 'b';
 
     setTimeout(() => {
-      ensureBoardOrientation(wantFlipped);
+      forceBoardOrientation(wantFlipped);
       applyAssistMode(cfg.mode);
       renderActiveBanner();
-    }, 100);
+    }, 120);
 
     setTimeout(() => {
-      ensureBoardOrientation(wantFlipped);
+      if (isBoardFlipped(app) !== wantFlipped) {
+        forceBoardOrientation(wantFlipped);
+      }
       if (resolvedColor === 'b') {
         runBlackSessionAiTurn();
       }
-    }, 340);
+    }, 360);
   };
 
   const openSetupModal = (variant = 'classic') => {
